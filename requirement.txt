@@ -15,3 +15,6 @@ wikipedia
 google-search-results
 langgraph-prebuilt
 ipykernel
+arxiv
+groq
+langgraph-cli[inmem]
