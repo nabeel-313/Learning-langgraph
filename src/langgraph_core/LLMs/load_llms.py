@@ -34,10 +34,7 @@ class LoadLLMs:
             return groq_llm
         except Exception as e:
             raise ExceptionError(e, sys)
-            
-        
-        pass
-    
+                
     def load_gemini_model(self):
         try:
             logging.info("Loading Gemini model...")
