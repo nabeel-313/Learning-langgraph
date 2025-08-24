@@ -1,4 +1,4 @@
-from typing_extensions import TypedDict,List
+from typing_extensions import TypedDict,List, Dict, Any
 from langgraph.graph.message import add_messages
 from typing import Annotated
 
@@ -7,3 +7,14 @@ class BasicChatbot(TypedDict):
     """
     
     messages: Annotated[List, add_messages]
+    
+class AINews_State(TypedDict):
+    """
+    Represent the structure of the state used in graph
+    """
+    messages: Annotated[List,add_messages]
+    # derived state variables through pipeline
+    frequency: str                # "daily" | "weekly" | "monthly" | "year"
+    news_data: List[Dict[str, Any]]  # results from Tavily
+    summary: str                  # markdown-formatted summary
+    filename: str

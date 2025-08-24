@@ -1,15 +1,18 @@
 from langgraph.graph import StateGraph, START, END
 from src.langgraph_core.state.states import BasicChatbot
+from src.langgraph_core.state.states import AINews_State
 from src.langgraph_core.nodes.nodes import BasicChatbotNode
 from src.langgraph_core.tools.tools import get_tools, create_tool_node
 from langgraph.prebuilt import tools_condition, ToolNode
 from src.langgraph_core.nodes.chatbot_with_tools_node import AgenticChatbotNode
+from src.langgraph_core.nodes.ai_news_node import AINewsNode
 
 
 class BasicChatbotGraphBuilder:
     def __init__(self,model):
         self.llm=model
         self.graph_builder=StateGraph(BasicChatbot)
+        self.graph_builder_ainews=StateGraph(AINews_State)
         
     def basic_chatbot_build_graph(self):
         """
@@ -55,3 +58,26 @@ class BasicChatbotGraphBuilder:
     def setup_agentic_graph(self):
         self.chatbot_with_tools_build_graph()
         return self.graph_builder.compile()
+    
+    
+    
+    def ai_news_builder_graph(self):
+
+        ai_news_node=AINewsNode(self.llm)
+
+        ## added the nodes
+
+        self.graph_builder_ainews.add_node("fetch_news",ai_news_node.fetch_news)
+        self.graph_builder_ainews.add_node("summarize_news",ai_news_node.summarize_news)
+        self.graph_builder_ainews.add_node("save_result",ai_news_node.save_result)
+
+        #added the edges
+
+        self.graph_builder_ainews.set_entry_point("fetch_news")
+        self.graph_builder_ainews.add_edge("fetch_news","summarize_news")
+        self.graph_builder_ainews.add_edge("summarize_news","save_result")
+        self.graph_builder_ainews.add_edge("save_result", END)
+        
+    def setup_ainews_graph(self):
+        self.ai_news_builder_graph()
+        return self.graph_builder_ainews.compile()
