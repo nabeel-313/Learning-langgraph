@@ -51,7 +51,7 @@ dev = [
 ]
 
 [tool.black]
-line-length = 88
+line-length = 150
 target-version = ["py311", "py312"]
 
 [tool.isort]

@@ -1,31 +1,34 @@
-from typing_extensions import TypedDict,List, Dict, Any
+from typing_extensions import TypedDict, List, Dict, Any
 from langgraph.graph.message import add_messages
 from typing import Annotated
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 
 
 class BasicChatbot(TypedDict):
-    """A basic chatbot with a simple conversation flow.
-    """
-    
+    """A basic chatbot with a simple conversation flow."""
+
     messages: Annotated[List, add_messages]
-    
+
+
 class AINews_State(TypedDict):
     """
     Represent the structure of the state used in graph
     """
-    messages: Annotated[List,add_messages]
+
+    messages: Annotated[List, add_messages]
     # derived state variables through pipeline
-    frequency: str                # "daily" | "weekly" | "monthly" | "year"
+    frequency: str  # "daily" | "weekly" | "monthly" | "year"
     news_data: List[Dict[str, Any]]  # results from Tavily
-    summary: str                  # markdown-formatted summary
+    summary: str  # markdown-formatted summary
     filename: str
-    
+
+
 class Blog(BaseModel):
-    title:str=Field(description="the title of the blog post")
-    content:str=Field(description="The main content of the blog post")
+    title: str = Field(description="the title of the blog post")
+    content: str = Field(description="The main content of the blog post")
+
 
 class BlogState(TypedDict):
-    topic:str
-    blog:Blog
-    current_language:str
+    topic: str
+    blog: Blog
+    current_language: str
