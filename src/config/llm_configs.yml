@@ -8,13 +8,20 @@ gemini:
 groq:
   model_name: llama-3.1-8b-instant
   temperature: 0.6
-  max_tokens: 1024
-  timeout: 25
-  max_retries: 2
+  max_tokens: 2048
+  timeout: 30
+  max_retries: 3
 
 openai:
-  model_name: gpt-4o
+  model_name: gpt-5-nano
   temperature: 0.5
-  max_tokens: 4096
+  max_tokens: 2048
+  timeout: 30
+  max_retries: 3
+
+deepseek:
+  model_name: deepseek-r1-distill-llama-70b
+  temperature: 0.7
+  max_tokens: 2048
   timeout: 20
   max_retries: 3

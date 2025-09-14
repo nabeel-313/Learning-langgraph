@@ -4,7 +4,7 @@ from langchain.tools import StructuredTool
 from src.utils.Utilities import get_api_key
 
 
-def weather_infotmation(city_name: str) -> WeatherResponse:
+def weather_information(city_name: str) -> WeatherResponse:
     """Generates a weather report for a given city."""
     base_url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
@@ -12,6 +12,7 @@ def weather_infotmation(city_name: str) -> WeatherResponse:
         "appid": get_api_key("OPENWEATHERMAP_API_KEY"),
         "units": "metric",
     }
+    # print("weather node called")
     response = requests.get(base_url, params=params)
 
     if response.status_code != 200:
@@ -29,7 +30,7 @@ def weather_infotmation(city_name: str) -> WeatherResponse:
 
 # Wrap as StructuredTool so LangGraph / LangChain agent can use it
 weather_tool = StructuredTool.from_function(
-    func=weather_infotmation,
+    func=weather_information,
     name="weather_infotmation",
     description="Fetches current weather info for a given city",
     return_direct=True,

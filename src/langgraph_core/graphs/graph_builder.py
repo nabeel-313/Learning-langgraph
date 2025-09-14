@@ -38,7 +38,7 @@ class BasicChatbotGraphBuilder:
         capabilities, and sets up conditional and direct edges between nodes.
         The chatbot node is set as the entry point.
         """
-        ## Define the tool and tool node
+        # Define the tool and tool node
         tools = get_tools()
         tool_node = create_tool_node(tools)
 
@@ -47,7 +47,7 @@ class BasicChatbotGraphBuilder:
         obj_chatbot_with_node = AgenticChatbotNode(llm)
         chatbot_node = obj_chatbot_with_node.create_chatbot(tools)
 
-        ## Add nodes
+        # Add nodes
         self.graph_builder.add_node("chatbot", chatbot_node)
         self.graph_builder.add_node("tools", tool_node)
         # Define conditional and direct edges
@@ -62,7 +62,7 @@ class BasicChatbotGraphBuilder:
     def ai_news_builder_graph(self):
         ai_news_node = AINewsNode(self.llm)
 
-        ## added the nodes
+        # added the nodes
 
         self.graph_builder_ainews.add_node("fetch_news", ai_news_node.fetch_news)
         self.graph_builder_ainews.add_node("summarize_news", ai_news_node.summarize_news)
