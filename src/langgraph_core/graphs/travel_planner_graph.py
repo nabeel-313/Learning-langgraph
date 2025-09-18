@@ -5,6 +5,7 @@ from src.langgraph_core.tools.tools import get_tools, create_tool_node
 from src.langgraph_core.tools.custom_tools import weather_tool
 from langgraph.prebuilt import ToolNode
 
+
 class TravelGraphBuilder:
     def __init__(self, llm):
         self.llm = llm
@@ -20,7 +21,7 @@ class TravelGraphBuilder:
 
         self.graph_builder.add_node(
             "chat_node",
-            lambda TravelPlannerState: self.travel_planer_node.chat_node(TravelPlannerState, self.llm),
+            self.travel_planer_node.chat_node
         )
 
         # Weather Node (ToolNode)
@@ -32,6 +33,15 @@ class TravelGraphBuilder:
         search_node = create_tool_node(tools)  # includes TavilySearchResults
         self.graph_builder.add_node("search_node", search_node)
 
+        self.graph_builder.add_node(
+            "travel_intent",
+            self.travel_planer_node.detect_travel,
+        )
+        self.graph_builder.add_node(
+            "travel_node",
+            self.travel_planer_node.travel_node,
+        )
+
     def _add_edges(self) -> None:
         """Define execution flow between nodes."""
         self.graph_builder.add_edge(START, "router_node")
@@ -39,12 +49,22 @@ class TravelGraphBuilder:
             "router_node",
             lambda state: state.get("route"),
             {
-                "chat": "chat_node",
+                "chat": "travel_intent",
                 "weather": "weather_node",
                 "search": "search_node",
+                # "travel": "travel_node"
+            }
+        )
+        self.graph_builder.add_conditional_edges(
+            "travel_intent",
+            lambda state: state.get("route"),
+            {
+                "travel": "travel_node",
+                "chat": "chat_node",
             }
         )
         self.graph_builder.add_edge("chat_node", END)
+        self.graph_builder.add_edge("travel_node", END)
         self.graph_builder.add_edge("weather_node", END)
         self.graph_builder.add_edge("search_node", END)
 
@@ -53,5 +73,7 @@ class TravelGraphBuilder:
         self._add_nodes()
         self._add_edges()
         compiled_graph = self.graph_builder.compile()
-        compiled_graph.get_graph().draw_mermaid_png(output_file_path=r"./logs/custom_routing.png")
+        compiled_graph.get_graph().draw_mermaid_png(
+            output_file_path=r"./logs/travel_routing_1.png",
+            )
         return compiled_graph
