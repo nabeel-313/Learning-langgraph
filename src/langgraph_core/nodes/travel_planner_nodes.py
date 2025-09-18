@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from uuid import uuid4
 from src.langgraph_core.tools.custom_tools import weather_tool
 from src.langgraph_core.tools.tools import get_tools
+from src.utils.Utilities import TravelInfo
 
 
 class TravelPlannerNode:
@@ -96,16 +97,16 @@ class TravelPlannerNode:
                 }
 
     def detect_travel(self, state: TravelPlannerState) -> dict:
-        query = state.get("last_user_message", "").lower()
+        query = state.get("last_user_message", "")
         if any(word in query for word in ["visit", "travel"]):
-            print("travel_detect")
             route = "travel"
         else:
             route = "chat"
 
         return {"route": route,
                 "messages": state["messages"],
-                "last_user_message": query}
+                "last_user_message": query
+                }
 
     def chat_node(self, state: TravelPlannerState):
         """
@@ -127,6 +128,29 @@ class TravelPlannerNode:
         return {"messages": state["messages"] + [response]}
 
     def travel_node(self, state: TravelPlannerState):
-        print("Travel_node being called")
-        last_msg = state["messages"][-1]
-        print("Current State:", last_msg)
+        extractor = TravelInfo()
+        info = extractor.extract_trip_info(state["last_user_message"])
+        state["location"] = info["location"]
+        state["start_date"] = info["start_date"]
+        state["end_date"] = info["end_date"]
+        state["duration"] = info["duration"]
+        # print(state)
+        parts = ["Got it! Planning trip"]
+
+        if state["location"]:
+            parts.append(f"to {state['location']}")
+
+        if state["duration"]:
+            parts.append(f"for {state['duration']} days")
+
+        if state["start_date"] and state["end_date"]:
+            parts.append(f"from {state['start_date']} to {state['end_date']}")
+
+        msg_text = " ".join(parts) + "."
+        return {
+                "messages": state["messages"] + [AIMessage(content=msg_text)],
+                "location": state["location"],
+                "start_date": state["start_date"],
+                "end_date": state["end_date"],
+                "duration": state["duration"],
+            }

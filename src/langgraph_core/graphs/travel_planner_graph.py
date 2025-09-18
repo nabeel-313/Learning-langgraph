@@ -74,6 +74,6 @@ class TravelGraphBuilder:
         self._add_edges()
         compiled_graph = self.graph_builder.compile()
         compiled_graph.get_graph().draw_mermaid_png(
-            output_file_path=r"./logs/travel_routing_1.png",
+            output_file_path=r"./logs/travel_routing_2.png",
             )
         return compiled_graph

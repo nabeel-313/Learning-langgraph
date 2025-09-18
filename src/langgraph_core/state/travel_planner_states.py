@@ -1,9 +1,14 @@
-from typing_extensions import TypedDict, List
+from typing_extensions import TypedDict, List, Optional
 from langgraph.graph.message import add_messages
 from typing import Annotated
+from datetime import date
+
 
 class TravelPlannerState(TypedDict):
-    """A basic chatbot with a simple conversation flow."""
-
+    """Travel planner state with user input + extracted details."""
     messages: Annotated[List, add_messages]
-    last_user_message: str   # <-- NEW FIELD to track original input
+    last_user_message: str
+    location: Optional[str]
+    start_date: Optional[date]
+    end_date: Optional[date]
+    duration: Optional[int]
