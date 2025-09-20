@@ -41,6 +41,10 @@ class TravelGraphBuilder:
             "travel_node",
             self.travel_planer_node.travel_node,
         )
+        self.graph_builder.add_node(
+            "collect_missing_travel_info_node",
+            self.travel_planer_node.collect_missing_travel_info,
+        )
 
     def _add_edges(self) -> None:
         """Define execution flow between nodes."""
@@ -63,8 +67,10 @@ class TravelGraphBuilder:
                 "chat": "chat_node",
             }
         )
+        self.graph_builder.add_edge("travel_node",
+                                    "collect_missing_travel_info_node")
         self.graph_builder.add_edge("chat_node", END)
-        self.graph_builder.add_edge("travel_node", END)
+        self.graph_builder.add_edge("collect_missing_travel_info_node", END)
         self.graph_builder.add_edge("weather_node", END)
         self.graph_builder.add_edge("search_node", END)
 
@@ -73,7 +79,6 @@ class TravelGraphBuilder:
         self._add_nodes()
         self._add_edges()
         compiled_graph = self.graph_builder.compile()
-        compiled_graph.get_graph().draw_mermaid_png(
-            output_file_path=r"./logs/travel_routing_2.png",
-            )
+        # compiled_graph.get_graph().draw_mermaid_png(
+        #    output_file_path=r"./logs/travel_routing_2.png")
         return compiled_graph

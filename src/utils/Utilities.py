@@ -92,7 +92,7 @@ class TravelInfo:
         start, end, trip_days = self.extract_dates_and_duration(text)
 
         return {
-            "location": locations[0] if locations else None,
+            "destination": locations[0] if locations else None,
             "start_date": start.isoformat() if start else None,
             "end_date": end.isoformat() if end else None,
             "duration": trip_days,

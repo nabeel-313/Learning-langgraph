@@ -4,6 +4,7 @@ from uuid import uuid4
 from src.langgraph_core.tools.custom_tools import weather_tool
 from src.langgraph_core.tools.tools import get_tools
 from src.utils.Utilities import TravelInfo
+from datetime import datetime
 
 
 class TravelPlannerNode:
@@ -122,7 +123,6 @@ class TravelPlannerNode:
 
         # Ignore AIMessage (only handle HumanMessage)
         if not isinstance(last_msg, HumanMessage):
-            print("check for HS,it is not")
             return {"messages": state["messages"]}
         response = self.llm.invoke([last_msg])
         return {"messages": state["messages"] + [response]}
@@ -130,15 +130,15 @@ class TravelPlannerNode:
     def travel_node(self, state: TravelPlannerState):
         extractor = TravelInfo()
         info = extractor.extract_trip_info(state["last_user_message"])
-        state["location"] = info["location"]
+        state["destination"] = info["destination"]
         state["start_date"] = info["start_date"]
         state["end_date"] = info["end_date"]
         state["duration"] = info["duration"]
         # print(state)
         parts = ["Got it! Planning trip"]
 
-        if state["location"]:
-            parts.append(f"to {state['location']}")
+        if state["destination"]:
+            parts.append(f"to {state['destination']}")
 
         if state["duration"]:
             parts.append(f"for {state['duration']} days")
@@ -149,8 +149,69 @@ class TravelPlannerNode:
         msg_text = " ".join(parts) + "."
         return {
                 "messages": state["messages"] + [AIMessage(content=msg_text)],
-                "location": state["location"],
+                "destination": state["destination"],
                 "start_date": state["start_date"],
                 "end_date": state["end_date"],
                 "duration": state["duration"],
             }
+
+    def collect_missing_travel_info(self, state: TravelPlannerState) -> dict:
+        DATE_FORMAT = "%Y-%m-%d"  # ISO format: 2025-09-18
+        # REQUIRED_FIELDS = ["location", "start_date", "end_date"]
+        """
+        Node function to collect missing travel information from the user interactively.
+        Updates state in-place and appends messages.
+        Automatically calculates duration from start and end dates.
+        """
+        messages = state.get("messages", [])
+
+        # 1️⃣ Prompt for missing location
+        if not state.get("destination"):
+            user_input = input("Please provide travel destination: ").strip()
+            state["destination"] = user_input
+            messages.append(HumanMessage(content=user_input))
+
+        # ask for source location
+        if not state.get("source"):
+            user_input = input("Please provide source location: ").strip()
+            state["source"] = user_input
+            messages.append(HumanMessage(content=user_input))
+
+        # 2️⃣ Prompt for missing start_date
+        while not state.get("start_date"):
+            user_input = input("Please provide start date (YYYY-MM-DD): ").strip()
+            try:
+                start_date = datetime.strptime(user_input, DATE_FORMAT).date()
+                state["start_date"] = start_date
+                messages.append(HumanMessage(content=user_input))
+            except ValueError:
+                print("Invalid date format. Please enter in YYYY-MM-DD format.")
+
+        # 3️⃣ Prompt for missing end_date
+        while not state.get("end_date"):
+            user_input = input("Please provide end date (YYYY-MM-DD): ").strip()
+            try:
+                end_date = datetime.strptime(user_input, DATE_FORMAT).date()
+                if end_date < state["start_date"]:
+                    print("End date cannot be before start date. Try again.")
+                    continue
+                state["end_date"] = end_date
+                messages.append(HumanMessage(content=user_input))
+            except ValueError:
+                print("Invalid date format. Please enter in YYYY-MM-DD format.")
+
+        # 4️⃣ Calculate duration automatically
+        state["duration"] = (state["end_date"] - state["start_date"]).days + 1
+
+        # 5️⃣ Add summary AIMessage
+        summary_msg = (
+            "Collected travel info:\n"
+            "destination: " + str(state["destination"]) + "\n"
+            "Start Date: " + str(state["start_date"]) + "\n"
+            "End Date: " + str(state["end_date"]) + "\n"
+            "Duration: " + str(state["duration"]) + " days"
+        )
+        messages.append(AIMessage(content=summary_msg))
+
+        state["messages"] = messages
+        return state

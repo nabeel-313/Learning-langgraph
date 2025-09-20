@@ -8,7 +8,8 @@ class TravelPlannerState(TypedDict):
     """Travel planner state with user input + extracted details."""
     messages: Annotated[List, add_messages]
     last_user_message: str
-    location: Optional[str]
+    destination: Optional[str]
+    source: Optional[str]
     start_date: Optional[date]
     end_date: Optional[date]
     duration: Optional[int]
