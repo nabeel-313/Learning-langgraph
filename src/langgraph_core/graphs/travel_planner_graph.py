@@ -49,6 +49,10 @@ class TravelGraphBuilder:
             "flight_node",
             self.travel_planer_node.flight_node,
         )
+        self.graph_builder.add_node(
+            "hotel_node",
+            self.travel_planer_node.hotel_node,
+        )
 
     def _add_edges(self) -> None:
         """Define execution flow between nodes."""
@@ -75,8 +79,9 @@ class TravelGraphBuilder:
                                     "collect_missing_travel_info_node")
         self.graph_builder.add_edge("collect_missing_travel_info_node",
                                     "flight_node")
+        self.graph_builder.add_edge("flight_node", "hotel_node")
         self.graph_builder.add_edge("chat_node", END)
-        self.graph_builder.add_edge("flight_node", END)
+        self.graph_builder.add_edge("hotel_node", END)
         self.graph_builder.add_edge("weather_node", END)
         self.graph_builder.add_edge("search_node", END)
 

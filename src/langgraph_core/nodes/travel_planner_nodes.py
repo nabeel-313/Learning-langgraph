@@ -2,7 +2,7 @@ from src.langgraph_core.state.travel_planner_states import TravelPlannerState
 from langchain_core.messages import AIMessage, HumanMessage
 from uuid import uuid4
 import json
-from src.langgraph_core.tools.custom_tools import weather_tool, search_flights
+from src.langgraph_core.tools.custom_tools import weather_tool, search_flights, search_hotels
 from src.langgraph_core.tools.tools import get_tools
 from src.utils.Utilities import TravelInfo
 from src.loggers import Logger
@@ -180,6 +180,17 @@ class TravelPlannerNode:
             state["destination"] = user_input
             messages.append(HumanMessage(content=user_input))
 
+        if state.get("destination"):
+            prompt = f"Is '{state['destination']}' a country or a city?" \
+                      "Reply with only one word: country or city."
+            resp = self.llm.invoke(prompt).content.strip().lower()
+
+            if resp == "country":
+                print(f"Destination '{state['destination']}' seems to be a country.")
+                city_input = input(f"Please provide a city in {state['destination']} (e.g., capital or preferred city): ").strip()
+                state["destination"] = city_input
+                messages.append(HumanMessage(content=city_input))
+
         # ask for source location
         if not state.get("source"):
             user_input = input("Please provide source location: ").strip()
@@ -232,7 +243,6 @@ class TravelPlannerNode:
         # LLM prompt for IATA
         IATA_prompt = f"""
         Convert the following source and destination into IATA airport codes.
-        If the input is a country, use its CAPITAL city airport code.
         Respond ONLY in strict JSON with keys "source" and "destination".
         Example:
         {{"source": "BOM", "destination": "DXB"}}
@@ -243,7 +253,7 @@ class TravelPlannerNode:
 
         resp = self.llm.invoke([HumanMessage(content=IATA_prompt)])
         raw_text = resp.content.strip()
-        print("LLM raw:", raw_text)
+        # print("LLM raw:", raw_text)
 
         # Parse the LLM output safely
         try:
@@ -255,11 +265,22 @@ class TravelPlannerNode:
             state["messages"] = messages
             return state
 
+        if not source_iata:
+            user_input = input(f'Could not find airport for "{source}". Please enter nearest airport city: ').strip()
+            state["source"] = user_input
+            messages.append(HumanMessage(content=f"Nearest airport city for source: {user_input}"))
+            source_iata = user_input.upper()  # or re-run LLM to convert city → IATA
+
+        if not destination_iata:
+            user_input = input(f'Could not find airport for "{destination}". Please enter nearest airport city: ').strip()
+            state["destination"] = user_input
+            messages.append(HumanMessage(content=f"Nearest airport city for destination: {user_input}"))
+            destination_iata = user_input.upper()  # or re-run LLM to convert city → IATA
+
         # Update state with normalized values
         # state["source"] = source_iata
         # state["destination"] = destination_iata
 
-        # Call flight search tool
         flights_data = search_flights(
             source=source_iata,
             destination=destination_iata,
@@ -268,7 +289,6 @@ class TravelPlannerNode:
             flight_type=state.get("flight_type", "cheapest")
         )
 
-        # Summarize results
         messages.append(AIMessage(content=f"Found {len(flights_data['flights'])} flights from {source_iata} to {destination_iata}."))
         flights_list = flights_data["flights"]
         flights_dict = {i + 1: flight for i, flight in enumerate(flights_list)}
@@ -281,5 +301,39 @@ class TravelPlannerNode:
         # Save into state
         # state["messages"] = messages
         # state["flights"] = flights_data["flights"]
+        return state
 
+    def hotel_node(self, state: TravelPlannerState):
+        """
+        Node to collect missing hotel info and search hotels using a custom tool.
+        """
+        messages = state.get("messages", [])
+
+        # city = state.get("accommodation_city") or state.get("destination")
+        # state["accommodation_city"] = city
+
+        if state.get("accommodation_area_type") is None:
+            area_input = input("Do you want to stay in main city, suburbs, or a specific neighborhood? ").strip()
+            state["accommodation_area_type"] = area_input
+            messages.append(HumanMessage(content=area_input))
+
+        if state.get("accommodation_guests") is None:
+            guests_input = input("How many guests will be staying? ").strip()
+            state["accommodation_guests"] = int(guests_input)
+            messages.append(HumanMessage(content=guests_input))
+
+        hotel_results = search_hotels(
+            city=state["destination"],
+            area_type=state["accommodation_area_type"],
+            check_in=state["start_date"],
+            check_out=state["end_date"],
+            guests=state["accommodation_guests"]
+        )
+
+        state["hotel_options"] = hotel_results.get("hotels", [])
+
+        summary_msg = f"Found {len(state['hotel_options'])} hotels in {state['destination']} " \
+                      f"({state['accommodation_area_type']}) for {state['accommodation_guests']} guests."
+        messages.append(AIMessage(content=summary_msg))
+        # state["messages"] = messages
         return state

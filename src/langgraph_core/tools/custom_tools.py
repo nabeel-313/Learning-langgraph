@@ -3,6 +3,7 @@ from src.langgraph_core.schemas.all_schems import WeatherResponse, WindInfo
 from langchain.tools import StructuredTool
 from src.utils.Utilities import get_api_key
 from src.loggers import Logger
+from src.exceptions import ExceptionError
 from typing import Dict, Any
 
 
@@ -34,7 +35,6 @@ def weather_information(city_name: str) -> WeatherResponse:
     return info.dict()
 
 
-# Wrap as StructuredTool so LangGraph / LangChain agent can use it
 weather_tool = StructuredTool.from_function(
     func=weather_information,
     name="weather_infotmation",
@@ -44,21 +44,16 @@ weather_tool = StructuredTool.from_function(
 
 
 def search_flights(source: str, destination: str, start_date: str,
-                   end_date: str, flight_type: str = "cheapest") -> Dict[str, Any]:
+                   end_date: str,
+                   flight_type: str = "cheapest") -> Dict[str, Any]:
     """
     Search flights using SerpAPI.
     """
     api_key = get_api_key("SERPAPI_API_KEY")
-    if not api_key:
-        raise ValueError("SerpAPI API key is required")
-
     params = {
-        "engine": "google_flights",
-        "departure_id": source,
-        "arrival_id": destination,
-        "outbound_date": start_date,
-        "return_date": end_date,
-        "currency": "INR",
+        "engine": "google_flights", "departure_id": source,
+        "arrival_id": destination, "outbound_date": start_date,
+        "return_date": end_date, "currency": "INR",
         "api_key": api_key,
     }
 
@@ -101,3 +96,57 @@ def search_flights(source: str, destination: str, start_date: str,
     except Exception as e:
         logger.error(f"Error fetching flights: {e}")
         return {"flights": []}
+
+
+def search_hotels(
+        city: str, area_type: str, check_in: str, check_out: str,
+        guests: int, hotel_type: str = "best") -> Dict[str, Any]:
+    """
+    Search hotels using SerpAPI.
+    Parameters:
+        city: City to search in
+        area_type: e.g., 'main city', 'suburban'
+        check_in, check_out: YYYY-MM-DD format
+        guests: Number of guests
+        hotel_type: 'best' or 'cheapest'
+    Returns:
+        Dict with list of hotels
+    """
+    api_key = get_api_key("SERPAPI_API_KEY")
+    params = {
+        "engine": "google_hotels", "q": f"{city}, {area_type}",
+        "check_in": check_in, "check_out": check_out,
+        "guests": guests, "currency": "INR", "api_key": api_key,
+        }
+
+    try:
+        logger.info(
+            "Searching hotels in %s (%s) for %d guests from %s to %s",
+            city, area_type, guests, check_in, check_out
+        )
+        response = requests.get("https://serpapi.com/search", params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract hotel list
+        hotel_list = data.get("hotels_results", [])
+        if hotel_type == "cheapest":
+            hotel_list.sort(key=lambda x: x.get("price", float("inf")))
+
+        hotels = []
+        for h in hotel_list:
+            hotels.append({
+                "name": h.get("title"),
+                "address": h.get("address"),
+                "price": h.get("price", {}).get("raw", "N/A"),
+                "rating": h.get("rating"),
+                "reviews": h.get("reviews"),
+                "url": h.get("link"),
+            })
+
+        return {"hotels": hotels}
+
+    except Exception as e:
+        custom_err = ExceptionError(e)
+        logger.error("Error fetching hotels: %s", custom_err)
+        return {"hotels": []}
