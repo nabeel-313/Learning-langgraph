@@ -81,14 +81,24 @@ def search_flights(source: str, destination: str, start_date: str,
                 "price": flight.get("price", "N/A"),
 
                 # Departure
-                "departure_airport": dep_airport.get("id") or dep_airport.get("name", ""),
-                "departure_time": dep_airport.get("time") or dep_airport.get("datetime", ""),
+                "departure_airport": (
+                    dep_airport.get("id") or dep_airport.get("name", ""),
+                ),
+                "departure_time": (
+                    dep_airport.get("time") or dep_airport.get("datetime", ""),
+                ),
 
                 # Arrival
-                "arrival_airport": arr_airport.get("id") or arr_airport.get("name", ""),
-                "arrival_time": arr_airport.get("time") or arr_airport.get("datetime", ""),
+                "arrival_airport": (
+                    arr_airport.get("id") or arr_airport.get("name", ""),
+                ),
+                "arrival_time": (
+                    arr_airport.get("time") or arr_airport.get("datetime", ""),
+                ),
 
-                "duration": segment.get("duration", flight.get("duration", "")),
+                "duration": (
+                    segment.get("duration", flight.get("duration", "")),
+                ),
             })
 
         return {"flights": flight_options}

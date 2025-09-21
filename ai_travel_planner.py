@@ -19,7 +19,9 @@ def langgraph_chatbot(user_message: str):
         logger.info(f"User message: {user_message}")
 
         # Stream responses from graph
-        for event in graph.stream({"messages": [HumanMessage(content=user_message)]}):
+        for event in graph.stream({"messages": [
+                                    HumanMessage(content=user_message)
+                                    ]}):
             for value in event.values():
                 # Each node updates state here
                 # print("Assistant:", value)
@@ -27,9 +29,11 @@ def langgraph_chatbot(user_message: str):
                 for msg in messages:
                     if isinstance(msg, AIMessage) and msg.content:
                         logger.info(f"Assistant: {msg.content}")
+                        lst_msg = msg.content
                     elif isinstance(msg, ToolMessage):
                         logger.info(f"[Tool Result] {msg.content}")
-
+                        lst_msg = msg.content
+        return lst_msg
     except Exception as e:
         # logger.exception("Chatbot execution failed")
         raise ExceptionError(e)
@@ -43,9 +47,7 @@ if __name__ == "__main__":
             if user_input.lower() in ["quit", "exit", "q"]:
                 print("Goodbye!")
                 break
-
             langgraph_chatbot(user_input)
-
         except KeyboardInterrupt:
             print("\nGoodbye!")
             break

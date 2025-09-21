@@ -6,6 +6,7 @@ from src.langgraph_core.tools.custom_tools import weather_tool, search_flights, 
 from src.langgraph_core.tools.tools import get_tools
 from src.utils.Utilities import TravelInfo
 from src.loggers import Logger
+from src.exceptions import ExceptionError
 from datetime import datetime
 
 
@@ -186,8 +187,8 @@ class TravelPlannerNode:
             resp = self.llm.invoke(prompt).content.strip().lower()
 
             if resp == "country":
-                print(f"Destination '{state['destination']}' seems to be a country.")
-                city_input = input(f"Please provide a city in {state['destination']} (e.g., capital or preferred city): ").strip()
+                city_input = input(f"Please provide a city in {state['destination']}"\
+                                   "(capital or preferred city): ").strip()
                 state["destination"] = city_input
                 messages.append(HumanMessage(content=city_input))
 
@@ -199,13 +200,15 @@ class TravelPlannerNode:
 
         # Prompt for missing start_date
         while not state.get("start_date"):
-            user_input = input("Please provide start date (YYYY-MM-DD): ").strip()
+            user_input = input("Please provide start date"
+                               "(YYYY-MM-DD): ").strip()
             try:
                 start_date = datetime.strptime(user_input, DATE_FORMAT).date()
                 state["start_date"] = start_date
                 messages.append(HumanMessage(content=user_input))
-            except ValueError:
-                print("Invalid date format. Please enter in YYYY-MM-DD format.")
+            except Exception as e:
+                custom_err = ExceptionError(e)
+                logger.error("Error fetching hotels: %s", custom_err)
 
         # Prompt for missing end_date
         while not state.get("end_date"):
@@ -260,10 +263,13 @@ class TravelPlannerNode:
             iata_data = json.loads(raw_text)
             source_iata = iata_data.get("source")
             destination_iata = iata_data.get("destination")
-        except Exception:
+        except Exception as e:
             messages.append(AIMessage(content=f"Could not parse IATA codes. Raw: {raw_text}"))
-            state["messages"] = messages
-            return state
+            custom_err = ExceptionError(e)
+            logger.error("Error fetching hotels: %s", custom_err)
+        # except Exception:
+        #     state["messages"] = messages
+        #     return state
 
         if not source_iata:
             user_input = input(f'Could not find airport for "{source}". Please enter nearest airport city: ').strip()
