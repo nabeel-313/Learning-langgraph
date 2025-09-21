@@ -23,7 +23,7 @@ class Logger:
         # Prevent duplicate handlers if re-imported
         if not self.logger.handlers:
             # File handler
-            file_handler = logging.FileHandler(logs_path)
+            file_handler = logging.FileHandler(logs_path, encoding="utf-8")
             file_handler.setFormatter(self._get_formatter())
             self.logger.addHandler(file_handler)
 

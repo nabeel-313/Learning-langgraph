@@ -1,10 +1,15 @@
 from src.langgraph_core.state.travel_planner_states import TravelPlannerState
 from langchain_core.messages import AIMessage, HumanMessage
 from uuid import uuid4
-from src.langgraph_core.tools.custom_tools import weather_tool
+import json
+from src.langgraph_core.tools.custom_tools import weather_tool, search_flights
 from src.langgraph_core.tools.tools import get_tools
 from src.utils.Utilities import TravelInfo
+from src.loggers import Logger
 from datetime import datetime
+
+
+logger = Logger(__name__).get_logger()
 
 
 class TravelPlannerNode:
@@ -14,6 +19,7 @@ class TravelPlannerNode:
         self.search_tool_name = get_tools()[0].name
 
     def router(self, state: TravelPlannerState) -> dict:
+        logger.info("Router node node is called")
         if not state.get("messages"):
             return {
                 "route": "chat",
@@ -97,7 +103,7 @@ class TravelPlannerNode:
                 "last_user_message": user_input
                 }
 
-    def detect_travel(self, state: TravelPlannerState) -> dict:
+    def detect_travel(self, state: TravelPlannerState, ) -> dict:
         query = state.get("last_user_message", "")
         if any(word in query for word in ["visit", "travel"]):
             route = "travel"
@@ -109,7 +115,8 @@ class TravelPlannerNode:
                 "last_user_message": query
                 }
 
-    def chat_node(self, state: TravelPlannerState):
+    def chat_node(self, state: TravelPlannerState,):
+        logger.info("Chat_node is called")
         """
         Pure chat node for normal LLM conversation.
         No tool logic here.
@@ -128,8 +135,10 @@ class TravelPlannerNode:
         return {"messages": state["messages"] + [response]}
 
     def travel_node(self, state: TravelPlannerState):
+        logger.info("Travel node is called")
         extractor = TravelInfo()
         info = extractor.extract_trip_info(state["last_user_message"])
+        logger.info("Extracting the info from user msg ...")
         state["destination"] = info["destination"]
         state["start_date"] = info["start_date"]
         state["end_date"] = info["end_date"]
@@ -156,16 +165,16 @@ class TravelPlannerNode:
             }
 
     def collect_missing_travel_info(self, state: TravelPlannerState) -> dict:
+        logger.info("Collecting missing traveling information")
         DATE_FORMAT = "%Y-%m-%d"  # ISO format: 2025-09-18
         # REQUIRED_FIELDS = ["location", "start_date", "end_date"]
         """
-        Node function to collect missing travel information from the user interactively.
+        Node function to collect missing travel information from the user.
         Updates state in-place and appends messages.
-        Automatically calculates duration from start and end dates.
         """
         messages = state.get("messages", [])
 
-        # 1️⃣ Prompt for missing location
+        # Prompt for missing location
         if not state.get("destination"):
             user_input = input("Please provide travel destination: ").strip()
             state["destination"] = user_input
@@ -177,7 +186,7 @@ class TravelPlannerNode:
             state["source"] = user_input
             messages.append(HumanMessage(content=user_input))
 
-        # 2️⃣ Prompt for missing start_date
+        # Prompt for missing start_date
         while not state.get("start_date"):
             user_input = input("Please provide start date (YYYY-MM-DD): ").strip()
             try:
@@ -187,7 +196,7 @@ class TravelPlannerNode:
             except ValueError:
                 print("Invalid date format. Please enter in YYYY-MM-DD format.")
 
-        # 3️⃣ Prompt for missing end_date
+        # Prompt for missing end_date
         while not state.get("end_date"):
             user_input = input("Please provide end date (YYYY-MM-DD): ").strip()
             try:
@@ -200,10 +209,10 @@ class TravelPlannerNode:
             except ValueError:
                 print("Invalid date format. Please enter in YYYY-MM-DD format.")
 
-        # 4️⃣ Calculate duration automatically
+        # Calculate duration automatically
         state["duration"] = (state["end_date"] - state["start_date"]).days + 1
 
-        # 5️⃣ Add summary AIMessage
+        # Add summary AIMessage
         summary_msg = (
             "Collected travel info:\n"
             "destination: " + str(state["destination"]) + "\n"
@@ -214,4 +223,63 @@ class TravelPlannerNode:
         messages.append(AIMessage(content=summary_msg))
 
         state["messages"] = messages
+        return state
+
+    def flight_node(self, state: TravelPlannerState):
+        messages = state.get("messages", [])
+        source = state.get("source")
+        destination = state.get("destination")
+        # LLM prompt for IATA
+        IATA_prompt = f"""
+        Convert the following source and destination into IATA airport codes.
+        If the input is a country, use its CAPITAL city airport code.
+        Respond ONLY in strict JSON with keys "source" and "destination".
+        Example:
+        {{"source": "BOM", "destination": "DXB"}}
+        User input:
+        source: "{source}"
+        destination: "{destination}"
+        """
+
+        resp = self.llm.invoke([HumanMessage(content=IATA_prompt)])
+        raw_text = resp.content.strip()
+        print("LLM raw:", raw_text)
+
+        # Parse the LLM output safely
+        try:
+            iata_data = json.loads(raw_text)
+            source_iata = iata_data.get("source")
+            destination_iata = iata_data.get("destination")
+        except Exception:
+            messages.append(AIMessage(content=f"Could not parse IATA codes. Raw: {raw_text}"))
+            state["messages"] = messages
+            return state
+
+        # Update state with normalized values
+        # state["source"] = source_iata
+        # state["destination"] = destination_iata
+
+        # Call flight search tool
+        flights_data = search_flights(
+            source=source_iata,
+            destination=destination_iata,
+            start_date=state.get("start_date"),
+            end_date=state.get("end_date"),
+            flight_type=state.get("flight_type", "cheapest")
+        )
+
+        # Summarize results
+        messages.append(AIMessage(content=f"Found {len(flights_data['flights'])} flights from {source_iata} to {destination_iata}."))
+        flights_list = flights_data["flights"]
+        flights_dict = {i + 1: flight for i, flight in enumerate(flights_list)}
+        print(flights_dict)
+
+        # Add 1–2 preview flights
+        for f in flights_data["flights"][:2]:
+            messages.append(AIMessage(content=f"{f['airline']} | {f['departure_airport']} → {f['arrival_airport']} {f['departure_time']} – {f['arrival_time']} | {f['price']}"))
+
+        # Save into state
+        # state["messages"] = messages
+        # state["flights"] = flights_data["flights"]
+
         return state

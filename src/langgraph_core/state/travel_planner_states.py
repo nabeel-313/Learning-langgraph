@@ -13,3 +13,8 @@ class TravelPlannerState(TypedDict):
     start_date: Optional[date]
     end_date: Optional[date]
     duration: Optional[int]
+    flight_type: Optional[str]
+
+
+
+
