@@ -17,6 +17,7 @@ def langgraph_chatbot(user_message: str):
     """Handle a single user message with logging and exception handling."""
     try:
         logger.info(f"User message: {user_message}")
+        collected_msgs = []
 
         # Stream responses from graph
         for event in graph.stream({"messages": [
@@ -30,10 +31,16 @@ def langgraph_chatbot(user_message: str):
                     if isinstance(msg, AIMessage) and msg.content:
                         logger.info(f"Assistant: {msg.content}")
                         lst_msg = msg.content
+                        collected_msgs.append(lst_msg)
+                        print(collected_msgs)
+                        return collected_msgs
                     elif isinstance(msg, ToolMessage):
                         logger.info(f"[Tool Result] {msg.content}")
                         lst_msg = msg.content
-        return lst_msg
+                        collected_msgs.append(lst_msg)
+                        print(collected_msgs)
+                        return collected_msgs
+                
     except Exception as e:
         # logger.exception("Chatbot execution failed")
         raise ExceptionError(e)

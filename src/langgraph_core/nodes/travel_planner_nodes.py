@@ -167,77 +167,50 @@ class TravelPlannerNode:
 
     def collect_missing_travel_info(self, state: TravelPlannerState) -> dict:
         logger.info("Collecting missing traveling information")
-        DATE_FORMAT = "%Y-%m-%d"  # ISO format: 2025-09-18
-        # REQUIRED_FIELDS = ["location", "start_date", "end_date"]
-        """
-        Node function to collect missing travel information from the user.
-        Updates state in-place and appends messages.
-        """
+        DATE_FORMAT = "%Y-%m-%d"
+
         messages = state.get("messages", [])
 
-        # Prompt for missing location
+        # Step 1: Destination
         if not state.get("destination"):
-            user_input = input("Please provide travel destination: ").strip()
-            state["destination"] = user_input
-            messages.append(HumanMessage(content=user_input))
+            messages.append(AIMessage(content="Where would you like to travel? (City or Country)"))
+            return {"messages": messages, "awaiting_field": "destination"}
 
-        if state.get("destination"):
-            prompt = f"Is '{state['destination']}' a country or a city?" \
-                      "Reply with only one word: country or city."
-            resp = self.llm.invoke(prompt).content.strip().lower()
+        # Step 2: If destination is a country → ask for city
+        if state.get("destination_is_country") and not state.get("city"):
+            messages.append(AIMessage(content=f"Please provide a city in {state['destination']} (capital or preferred city)."))
+            return {"messages": messages, "awaiting_field": "city"}
 
-            if resp == "country":
-                city_input = input(f"Please provide a city in {state['destination']}"\
-                                   "(capital or preferred city): ").strip()
-                state["destination"] = city_input
-                messages.append(HumanMessage(content=city_input))
-
-        # ask for source location
+        # Step 3: Source
         if not state.get("source"):
-            user_input = input("Please provide source location: ").strip()
-            state["source"] = user_input
-            messages.append(HumanMessage(content=user_input))
+            messages.append(AIMessage(content="What is your source location?"))
+            return {"messages": messages, "awaiting_field": "source"}
 
-        # Prompt for missing start_date
-        while not state.get("start_date"):
-            user_input = input("Please provide start date"
-                               "(YYYY-MM-DD): ").strip()
-            try:
-                start_date = datetime.strptime(user_input, DATE_FORMAT).date()
-                state["start_date"] = start_date
-                messages.append(HumanMessage(content=user_input))
-            except Exception as e:
-                custom_err = ExceptionError(e)
-                logger.error("Error fetching hotels: %s", custom_err)
+        # Step 4: Start date
+        if not state.get("start_date"):
+            messages.append(AIMessage(content="Please provide a start date (YYYY-MM-DD)."))
+            return {"messages": messages, "awaiting_field": "start_date"}
 
-        # Prompt for missing end_date
-        while not state.get("end_date"):
-            user_input = input("Please provide end date (YYYY-MM-DD): ").strip()
-            try:
-                end_date = datetime.strptime(user_input, DATE_FORMAT).date()
-                if end_date < state["start_date"]:
-                    print("End date cannot be before start date. Try again.")
-                    continue
-                state["end_date"] = end_date
-                messages.append(HumanMessage(content=user_input))
-            except ValueError:
-                print("Invalid date format. Please enter in YYYY-MM-DD format.")
+        # Step 5: End date
+        if not state.get("end_date"):
+            messages.append(AIMessage(content="Please provide an end date (YYYY-MM-DD)."))
+            return {"messages": messages, "awaiting_field": "end_date"}
 
-        # Calculate duration automatically
+        # Step 6: Calculate duration automatically
         state["duration"] = (state["end_date"] - state["start_date"]).days + 1
 
-        # Add summary AIMessage
+        # Final summary
         summary_msg = (
-            "Collected travel info:\n"
-            "destination: " + str(state["destination"]) + "\n"
-            "Start Date: " + str(state["start_date"]) + "\n"
-            "End Date: " + str(state["end_date"]) + "\n"
-            "Duration: " + str(state["duration"]) + " days"
+            f"Collected travel info:\n"
+            f"Destination: {state['destination']}\n"
+            f"Start Date: {state['start_date']}\n"
+            f"End Date: {state['end_date']}\n"
+            f"Duration: {state['duration']} days"
         )
         messages.append(AIMessage(content=summary_msg))
 
-        state["messages"] = messages
-        return state
+        return {"messages": messages, **state}
+
 
     def flight_node(self, state: TravelPlannerState):
         messages = state.get("messages", [])
