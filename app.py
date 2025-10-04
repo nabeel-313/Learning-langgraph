@@ -5,6 +5,7 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
+
 @app.route("/")
 def index():
     """
@@ -26,7 +27,7 @@ def get_data():
     :raises Exception: If the `generate_response` function encounters an error.
     """
     data = request.get_json()
-    text=data.get('data')
+    text = data.get('data')
     user_input = text
     print(user_input)
     out = langgraph_chatbot(user_input)
@@ -39,7 +40,8 @@ def get_data():
     else:
         response_message = str(out)  # Fallback to string
     return jsonify({"response": True, "message": response_message})
-    #return jsonify({"response":True,"message":out})
+    # return jsonify({"response":True,"message":out})
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -109,8 +109,8 @@ def search_flights(source: str, destination: str, start_date: str,
 
 
 def search_hotels(
-        city: str, area_type: str, check_in: str, check_out: str,
-        guests: int, hotel_type: str = "best") -> Dict[str, Any]:
+    city: str, check_in: str, check_out: str,
+    guests: int, hotel_type: str = "cheapest") -> Dict[str, Any]:
     """
     Search hotels using SerpAPI.
     Parameters:
@@ -124,39 +124,47 @@ def search_hotels(
     """
     api_key = get_api_key("SERPAPI_API_KEY")
     params = {
-        "engine": "google_hotels", "q": f"{city}, {area_type}",
-        "check_in": check_in, "check_out": check_out,
-        "guests": guests, "currency": "INR", "api_key": api_key,
+        "engine": "google_hotels", "q": f"{city}",
+        "check_in_date": check_in, "check_out_date": check_out,
+        "adults": guests, "currency": "INR", "api_key": api_key,
         }
 
     try:
-        logger.info(
-            "Searching hotels in %s (%s) for %d guests from %s to %s",
-            city, area_type, guests, check_in, check_out
-        )
+        # logger.info(
+        #     "Searching hotels in %s  for %d guests from %s to %s",
+        #     city, guests, check_in, check_out
+        # )
         response = requests.get("https://serpapi.com/search", params=params)
         response.raise_for_status()
         data = response.json()
 
-        # Extract hotel list
-        hotel_list = data.get("hotels_results", [])
+        # Extract properties list (correct field name in the API response)
+        properties_list = data.get("properties", [])
+
         if hotel_type == "cheapest":
-            hotel_list.sort(key=lambda x: x.get("price", float("inf")))
+            properties_list.sort(key=lambda x: x.get("rate_per_night", {}).get("extracted_lowest", float("inf")))
 
         hotels = []
-        for h in hotel_list:
+        for prop in properties_list:
+            rate_info = prop.get("rate_per_night", {})
+            total_rate = prop.get("total_rate", {})
+
             hotels.append({
-                "name": h.get("title"),
-                "address": h.get("address"),
-                "price": h.get("price", {}).get("raw", "N/A"),
-                "rating": h.get("rating"),
-                "reviews": h.get("reviews"),
-                "url": h.get("link"),
+                "name": prop.get("name"),
+                "address": prop.get("gps_coordinates", {}),  # Using coordinates as address
+                "price": rate_info.get("lowest", "N/A"),
+                "rating": prop.get("overall_rating"),
+                "reviews": prop.get("reviews"),
+                "url": prop.get("link", ""),
+                "type": prop.get("type"),
+                "hotel_class": prop.get("hotel_class"),
+                "total_rate": total_rate.get("lowest", "N/A")
             })
 
         return {"hotels": hotels}
 
     except Exception as e:
+
         custom_err = ExceptionError(e)
         logger.error("Error fetching hotels: %s", custom_err)
         return {"hotels": []}
