@@ -31,9 +31,6 @@ def get_data():
     user_input = text
     print(user_input)
     out = langgraph_chatbot(user_input)
-    print("---"*100)
-    print(out)
-    print("---"*100)
     # If output is a dict and includes non-serializable messages, fix it
     if isinstance(out, dict) and "output" in out:
         response_message = out["output"]
