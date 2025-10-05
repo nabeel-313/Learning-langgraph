@@ -512,3 +512,5 @@ fastapi==0.115.9
 langchain-chroma
 langchain-openai
 openpyxl
+redis
+
