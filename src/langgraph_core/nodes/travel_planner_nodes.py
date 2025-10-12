@@ -1,14 +1,19 @@
-from src.langgraph_core.state.travel_planner_states import TravelPlannerState
-from langchain_core.messages import AIMessage, HumanMessage
-from uuid import uuid4
 import json
-from src.langgraph_core.tools.custom_tools import weather_tool, search_flights, search_hotels
-from src.langgraph_core.tools.tools import get_tools
-from src.utils.Utilities import TravelInfo
-from src.loggers import Logger
-from src.exceptions import ExceptionError
 from datetime import datetime
+from uuid import uuid4
 
+from langchain_core.messages import AIMessage, HumanMessage
+
+from src.exceptions import ExceptionError
+from src.langgraph_core.state.travel_planner_states import TravelPlannerState
+from src.langgraph_core.tools.custom_tools import (
+    search_flights,
+    search_hotels,
+    weather_tool,
+)
+from src.langgraph_core.tools.tools import get_tools
+from src.loggers import Logger
+from src.utils.Utilities import TravelInfo
 
 logger = Logger(__name__).get_logger()
 
@@ -24,79 +29,43 @@ class TravelPlannerNode:
         logger.info(f"DEBUG - awaiting_field: {state.get('awaiting_field')}")
         logger.info(f"DEBUG - all state keys: {list(state.keys())}")
         if not state.get("messages"):
-            return {
-                "route": "chat",
-                "messages": [AIMessage(content="Hello! I'm your travel assistant. How can I help you today?")],
-                "last_user_message": ""
-            }
+            return {"route": "chat", "messages": [AIMessage(content="Hello! I'm your travel assistant. How can I help you today?")], "last_user_message": ""}
 
         available_flights = state.get("available_flights", {})
         if available_flights and not state.get("flights_processed", False):
             logger.info("Bypassing router - processing flight selection")
-            return {
-                "route": "flight_selection_node",
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-                }
+            return {"route": "flight_selection_node", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}
 
         available_hotels = state.get("available_hotels", {})
         if available_hotels and not state.get("hotels_processed", False):
             logger.info("Bypassing router - processing hotel selection")
-            return {
-                "route": "hotel_selection_node",
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-            }
+            return {"route": "hotel_selection_node", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}
 
         if state.get("awaiting_field"):
             logger.info("Bypassing router - continuing travel info collection")
-            return {
-                "route": "collect_missing_travel_info_node",
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-                }
+            return {"route": "collect_missing_travel_info_node", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}
 
         if state.get("awaiting_airport_clarification"):
             logger.info("Bypassing router - processing airport clarification")
-            return {
-                "route": "flight_search_node",  # Go back to flight node to process the response
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-            }
+            return {"route": "flight_search_node", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}  # Go back to flight node to process the response
 
         # If waiting for destination city clarification
         if state.get("awaiting_destination_city"):
             logger.info("Bypassing router - processing destination city clarification")
-            return {
-                "route": "flight_search_node",  # Go back to flight node to process the response
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-            }
+            return {"route": "flight_search_node", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}  # Go back to flight node to process the response
 
         # Check if we're waiting for travel confirmation
         if state.get("awaiting_confirmation"):
             logger.info("Processing travel confirmation")
-            return {
-                "route": "process_travel_confirmation",
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-                }
+            return {"route": "process_travel_confirmation", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}
 
-        if (state.get("destination") and (state.get("accommodation_guests") is None)):
+        if state.get("destination") and (state.get("accommodation_guests") is None):
             logger.info("Bypassing router - collecting hotel preferences")
-            return {
-                "route": "collect_hotel_info_node",
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-            }
+            return {"route": "collect_hotel_info_node", "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}
 
         last_msg = state["messages"][-1]
         if not isinstance(last_msg, HumanMessage):
-            return {
-                "route": state.get("route", "chat"),
-                "messages": state["messages"],
-                "last_user_message": state.get("last_user_message", "")
-            }
+            return {"route": state.get("route", "chat"), "messages": state["messages"], "last_user_message": state.get("last_user_message", "")}
 
         user_input = last_msg.content
         state["last_user_message"] = user_input
@@ -121,11 +90,7 @@ class TravelPlannerNode:
             city = city_response.content.strip() or "pune"
             ai_msg = AIMessage(
                 content="Let me check the weather for you...",
-                tool_calls=[{
-                    "id": str(uuid4()),
-                    "name": self.weather_tool_name,
-                    "args": {"city_name": city}
-                }],
+                tool_calls=[{"id": str(uuid4()), "name": self.weather_tool_name, "args": {"city_name": city}}],
             )
             messages = messages + [ai_msg]
         elif route == "search":
@@ -134,20 +99,12 @@ class TravelPlannerNode:
             query = query_response.content.strip() or user_input
             ai_msg = AIMessage(
                 content=f"Searching for {query}...",
-                tool_calls=[{
-                    "id": str(uuid4()),
-                    "name": self.search_tool_name,
-                    "args": {"query": query}
-                }],
+                tool_calls=[{"id": str(uuid4()), "name": self.search_tool_name, "args": {"query": query}}],
             )
             messages = messages + [ai_msg]
 
         logger.info(f"Router classified intent as: {route}")
-        return {
-            "route": route,
-            "messages": messages,
-            "last_user_message": user_input
-        }
+        return {"route": route, "messages": messages, "last_user_message": user_input}
 
     def chat_node(self, state: TravelPlannerState):
         logger.info("Chat_node is called")
@@ -171,13 +128,7 @@ class TravelPlannerNode:
         info = extractor.extract_trip_info(user_input)
 
         # Update state with extracted info
-        state.update({
-            "destination": info.get("destination"),
-            "start_date": info.get("start_date"),
-            "end_date": info.get("end_date"),
-            "duration": info.get("duration"),
-            "source": info.get("source")
-        })
+        state.update({"destination": info.get("destination"), "start_date": info.get("start_date"), "end_date": info.get("end_date"), "duration": info.get("duration"), "source": info.get("source")})
 
         # Build confirmation message
         parts = ["Got it! Planning trip"]
@@ -215,17 +166,7 @@ class TravelPlannerNode:
         # In travel_node, before return:
         logger.info(f"DEBUG - Returning state with awaiting_field: {state.get('awaiting_field')}")
         logger.info(f"DEBUG - Returning state keys: {list(state.keys())}")
-        return {
-            "messages": state["messages"],
-            "destination": state.get("destination"),
-            "source": state.get("source"),
-            "start_date": state.get("start_date"),
-            "end_date": state.get("end_date"),
-            "duration": state.get("duration"),
-            "route": state["route"],
-            "awaiting_field": state.get("awaiting_field"),  # ← THIS IS CRITICAL
-            "missing_fields": state.get("missing_fields")   # ← THIS TOO
-            }
+        return {"messages": state["messages"], "destination": state.get("destination"), "source": state.get("source"), "start_date": state.get("start_date"), "end_date": state.get("end_date"), "duration": state.get("duration"), "route": state["route"], "awaiting_field": state.get("awaiting_field"), "missing_fields": state.get("missing_fields")}  # ← THIS IS CRITICAL  # ← THIS TOO
 
     def collect_missing_travel_info(self, state: TravelPlannerState):
         logger.info("Collect missing travel info node is called")
@@ -293,9 +234,7 @@ class TravelPlannerNode:
                 logger.info(f"Displayed trip summary: {summary_msg}")
 
                 # Add searching message
-                state["messages"].append(AIMessage(
-                    content="Should I proceed with searching for flights and hotels? (yes/no)"
-                ))
+                state["messages"].append(AIMessage(content="Should I proceed with searching for flights and hotels? (yes/no)"))
                 state["route"] = "END"
                 state["awaiting_confirmation"] = True  # ← Track that we're waiting for confirmation
                 logger.info("Displayed trip summary, waiting for user confirmation")
@@ -325,17 +264,7 @@ class TravelPlannerNode:
                 state["route"] = "END"  # End the graph execution
                 logger.info("Waiting for user response - ending graph")
 
-        return {
-            "messages": state["messages"],
-            "source": state.get("source"),
-            "start_date": state.get("start_date"),
-            "end_date": state.get("end_date"),
-            "duration": state.get("duration"),
-            "route": state["route"],
-            "awaiting_field": state.get("awaiting_field"),
-            "missing_fields": state.get("missing_fields"),
-            "awaiting_confirmation": state.get("awaiting_confirmation")
-        }
+        return {"messages": state["messages"], "source": state.get("source"), "start_date": state.get("start_date"), "end_date": state.get("end_date"), "duration": state.get("duration"), "route": state["route"], "awaiting_field": state.get("awaiting_field"), "missing_fields": state.get("missing_fields"), "awaiting_confirmation": state.get("awaiting_confirmation")}
 
     def _calculate_duration(self, start_date: str, end_date: str) -> int:
         """Calculate duration between two dates in days."""
@@ -385,9 +314,7 @@ class TravelPlannerNode:
                 # User declined or said something else
                 state["awaiting_confirmation"] = False
                 state["route"] = "chat_node"
-                state["messages"].append(AIMessage(
-                    content="Okay, let me know if you'd like to make any changes to your trip details."
-                ))
+                state["messages"].append(AIMessage(content="Okay, let me know if you'd like to make any changes to your trip details."))
 
         return state
 
@@ -402,16 +329,17 @@ class TravelPlannerNode:
         # Validate we have all required information
         if not all([source, destination, start_date, end_date]):
             missing_fields = []
-            if not source: missing_fields.append("source")
-            if not start_date: missing_fields.append("start_date")
-            if not end_date: missing_fields.append("end_date")
+            if not source:
+                missing_fields.append("source")
+            if not start_date:
+                missing_fields.append("start_date")
+            if not end_date:
+                missing_fields.append("end_date")
 
             state["missing_fields"] = missing_fields
             state["awaiting_field"] = missing_fields[0]
             state["route"] = "collect_missing_travel_info_node"
-            state["messages"].append(AIMessage(
-                content="I'm missing some information to search for flights."
-            ))
+            state["messages"].append(AIMessage(content="I'm missing some information to search for flights."))
             return state
 
         # Step 1: Check if we're processing a destination city response
@@ -460,9 +388,7 @@ class TravelPlannerNode:
                     city_resp = self.llm.invoke([HumanMessage(content=city_suggestion_prompt)])
                     suggested_city = city_resp.content.strip()
 
-                    state["messages"].append(AIMessage(
-                        content=f"I see you mentioned {destination} which is a country. For flight search, I need a specific city. Should I use {suggested_city} or would you like to specify a different city in {destination}?"
-                    ))
+                    state["messages"].append(AIMessage(content=f"I see you mentioned {destination} which is a country. For flight search, I need a specific city. Should I use {suggested_city} or would you like to specify a different city in {destination}?"))
                     state["awaiting_destination_city"] = True
                     state["original_destination"] = destination
                     state["suggested_city"] = suggested_city
@@ -516,13 +442,7 @@ class TravelPlannerNode:
         try:
             logger.info(f"Searching flights from {source_iata} to {destination_iata}")
 
-            flights_data = search_flights(
-                source=source_iata,
-                destination=destination_iata,
-                start_date=start_date,
-                end_date=end_date,
-                flight_type=state.get("flight_type", "cheapest")
-            )
+            flights_data = search_flights(source=source_iata, destination=destination_iata, start_date=start_date, end_date=end_date, flight_type=state.get("flight_type", "cheapest"))
 
             flights_list = flights_data.get("flights", [])
 
@@ -539,10 +459,10 @@ class TravelPlannerNode:
                 flights_msg = f"**🎫 Found {len(flights_dict)} flights from {source} to {destination}:**\n\n"
 
                 for flight_no, flight in flights_dict.items():
-                    airline = flight.get('airline', 'Unknown Airline')
-                    price = flight.get('price', 'Price not available')
-                    departure_time = flight.get('departure_time', 'Time not available')
-                    arrival_time = flight.get('arrival_time', 'Time not available')
+                    airline = flight.get("airline", "Unknown Airline")
+                    price = flight.get("price", "Price not available")
+                    departure_time = flight.get("departure_time", "Time not available")
+                    arrival_time = flight.get("arrival_time", "Time not available")
 
                     flights_msg += f"**{flight_no}. {airline}**\n"
                     flights_msg += f"   💰 Price: {price}\n"
@@ -550,8 +470,8 @@ class TravelPlannerNode:
                     flights_msg += f"   🕐 Arrival: {arrival_time}\n"
 
                     # Add duration if available
-                    duration = flight.get('duration')
-                    if duration and duration != 'Duration not available':
+                    duration = flight.get("duration")
+                    if duration and duration != "Duration not available":
                         flights_msg += f"   ⏱️ Duration: {duration}\n"
 
                     flights_msg += "\n"
@@ -583,8 +503,6 @@ class TravelPlannerNode:
 
         return state
 
-
-
     def flight_selection_node(self, state: TravelPlannerState):
         logger.info("Flight selection node is called")
 
@@ -605,8 +523,8 @@ class TravelPlannerNode:
                 state["accommodation_guests"] = None
 
                 # Build confirmation message
-                airline = selected_flight.get('airline', 'Unknown Airline')
-                price = selected_flight.get('price', 'Price not available')
+                airline = selected_flight.get("airline", "Unknown Airline")
+                price = selected_flight.get("price", "Price not available")
 
                 confirmation_msg = f"✅ **Flight {user_input} selected!**\n\n"
                 confirmation_msg += f"**{airline}** - {price}\n\n"
@@ -637,17 +555,13 @@ class TravelPlannerNode:
         end_date = state.get("end_date")
 
         if not destination:
-            state["messages"].append(AIMessage(
-                content="I need to know your destination to search for hotels."
-            ))
+            state["messages"].append(AIMessage(content="I need to know your destination to search for hotels."))
             state["route"] = "END"
             return state
 
         # Check if we need to collect hotel preferences
         if state.get("accommodation_guests") is None:
-            state["messages"].append(AIMessage(
-                content="How many guests will be staying?"
-            ))
+            state["messages"].append(AIMessage(content="How many guests will be staying?"))
             state["route"] = "collect_hotel_info_node"
             return state
 
@@ -668,12 +582,7 @@ class TravelPlannerNode:
 
         # Search for hotels
         try:
-            hotel_results = search_hotels(
-                city=destination,
-                check_in=start_date,
-                check_out=end_date,
-                guests=state["accommodation_guests"]
-            )
+            hotel_results = search_hotels(city=destination, check_in=start_date, check_out=end_date, guests=state["accommodation_guests"])
 
             hotel_options = hotel_results.get("hotels", [])
             print(len(hotel_options))
@@ -691,20 +600,20 @@ class TravelPlannerNode:
                 hotels_msg = f"**🏨 Found {len(hotels_dict)} hotels in {destination}:**\n\n"
 
                 for hotel_no, hotel in hotels_dict.items():
-                    name = hotel.get('name', 'Unknown Hotel')
-                    price = hotel.get('price', 'Price not available')
-                    rating = hotel.get('rating', 'Rating not available')
-                    location = hotel.get('location', 'Location not available')
+                    name = hotel.get("name", "Unknown Hotel")
+                    price = hotel.get("price", "Price not available")
+                    rating = hotel.get("rating", "Rating not available")
+                    location = hotel.get("location", "Location not available")
 
                     hotels_msg += f"**{hotel_no}. {name}**\n"
                     hotels_msg += f"   💰 Price: {price} per night\n"
-                    if rating and rating != 'Rating not available':
+                    if rating and rating != "Rating not available":
                         hotels_msg += f"   ⭐ Rating: {rating}/5\n"
-                    if location and location != 'Location not available':
+                    if location and location != "Location not available":
                         hotels_msg += f"   📍 Location: {location}\n"
 
                     # Add amenities if available
-                    amenities = hotel.get('amenities')
+                    amenities = hotel.get("amenities")
                     if amenities:
                         hotels_msg += f"   🛎️ Amenities: {', '.join(amenities[:3])}\n"
 
@@ -754,9 +663,9 @@ class TravelPlannerNode:
                 state["hotels_processed"] = True
 
                 # Build confirmation message
-                name = selected_hotel.get('name', 'Unknown Hotel')
-                price = selected_hotel.get('price', 'Price not available')
-                rating = selected_hotel.get('rating', '')
+                name = selected_hotel.get("name", "Unknown Hotel")
+                price = selected_hotel.get("price", "Price not available")
+                rating = selected_hotel.get("rating", "")
 
                 confirmation_msg = f"✅ **Hotel {user_input} selected!**\n\n"
                 confirmation_msg += f"**{name}**\n"
@@ -812,24 +721,18 @@ class TravelPlannerNode:
                 try:
                     state["accommodation_guests"] = int(user_input)
                     state["route"] = "hotel_search_node"
-                    state["messages"].append(AIMessage(
-                        content="Great! Now searching for hotels..."
-                    ))
+                    state["messages"].append(AIMessage(content="Great! Now searching for hotels..."))
                     logger.info(f"User provided guests: {user_input}, routing to hotel_search_node")
                     return state
                 except ValueError:
-                    state["messages"].append(AIMessage(
-                        content="Please enter a valid number for guests (e.g., 2)."
-                    ))
+                    state["messages"].append(AIMessage(content="Please enter a valid number for guests (e.g., 2)."))
                     state["route"] = "collect_hotel_info_node"
                     return state
 
         else:
             # No response yet - ask for guests
             if state.get("accommodation_guests") is None:
-                state["messages"].append(AIMessage(
-                    content="How many guests will be staying?"
-                ))
+                state["messages"].append(AIMessage(content="How many guests will be staying?"))
                 state["route"] = "END"
             else:
                 # Shouldn't get here if guests already set
@@ -849,16 +752,19 @@ class TravelPlannerNode:
 
         if not all([destination, start_date, end_date, duration, selected_hotel]):
             missing = []
-            if not destination: missing.append("destination")
-            if not start_date: missing.append("start_date")
-            if not end_date: missing.append("end_date")
-            if not duration: missing.append("duration")
-            if not selected_hotel: missing.append("selected_hotel")
+            if not destination:
+                missing.append("destination")
+            if not start_date:
+                missing.append("start_date")
+            if not end_date:
+                missing.append("end_date")
+            if not duration:
+                missing.append("duration")
+            if not selected_hotel:
+                missing.append("selected_hotel")
 
             logger.error(f"Missing required fields for itinerary: {missing}")
-            state["messages"].append(AIMessage(
-                content="I need complete trip details to generate your itinerary. Let's start over."
-            ))
+            state["messages"].append(AIMessage(content="I need complete trip details to generate your itinerary. Let's start over."))
             state["route"] = "END"
             return state
 
@@ -914,14 +820,7 @@ class TravelPlannerNode:
 
         except Exception as e:
             logger.error(f"Error generating itinerary: {e}")
-            state["messages"].append(AIMessage(
-                content=f"✅ Your booking is confirmed! I encountered an issue generating the detailed itinerary, but your hotel and flight are booked.\n\n"
-                    f"**Trip Summary:**\n"
-                    f"• Destination: {destination}\n"
-                    f"• Dates: {start_date} to {end_date}\n"
-                    f"• Hotel: {selected_hotel.get('name', 'Selected hotel')}\n\n"
-                    f"Have a wonderful trip! 🎉"
-            ))
+            state["messages"].append(AIMessage(content=f"✅ Your booking is confirmed! I encountered an issue generating the detailed itinerary, but your hotel and flight are booked.\n\n" f"**Trip Summary:**\n" f"• Destination: {destination}\n" f"• Dates: {start_date} to {end_date}\n" f"• Hotel: {selected_hotel.get('name', 'Selected hotel')}\n\n" f"Have a wonderful trip! 🎉"))
             state["route"] = "END"
 
         return state

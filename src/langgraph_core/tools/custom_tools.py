@@ -1,11 +1,12 @@
-import requests
-from src.langgraph_core.schemas.all_schems import WeatherResponse, WindInfo
-from langchain.tools import StructuredTool
-from src.utils.Utilities import get_api_key
-from src.loggers import Logger
-from src.exceptions import ExceptionError
-from typing import Dict, Any
+from typing import Any, Dict
 
+import requests
+from langchain.tools import StructuredTool
+
+from src.exceptions import ExceptionError
+from src.langgraph_core.schemas.all_schems import WeatherResponse, WindInfo
+from src.loggers import Logger
+from src.utils.Utilities import get_api_key
 
 logger = Logger(__name__).get_logger()
 
@@ -29,8 +30,7 @@ def weather_information(city_name: str) -> WeatherResponse:
         city=data["name"],
         temp=data["main"]["temp"],
         unit="Celsius",
-        wind=WindInfo(speed=data["wind"]["speed"],
-                      direction=data["wind"]["deg"]),
+        wind=WindInfo(speed=data["wind"]["speed"], direction=data["wind"]["deg"]),
     )
     return info.dict()
 
@@ -43,17 +43,18 @@ weather_tool = StructuredTool.from_function(
 )
 
 
-def search_flights(source: str, destination: str, start_date: str,
-                   end_date: str,
-                   flight_type: str = "cheapest") -> Dict[str, Any]:
+def search_flights(source: str, destination: str, start_date: str, end_date: str, flight_type: str = "cheapest") -> Dict[str, Any]:
     """
     Search flights using SerpAPI.
     """
     api_key = get_api_key("SERPAPI_API_KEY")
     params = {
-        "engine": "google_flights", "departure_id": source,
-        "arrival_id": destination, "outbound_date": start_date,
-        "return_date": end_date, "currency": "INR",
+        "engine": "google_flights",
+        "departure_id": source,
+        "arrival_id": destination,
+        "outbound_date": start_date,
+        "return_date": end_date,
+        "currency": "INR",
         "api_key": api_key,
     }
 
@@ -76,30 +77,19 @@ def search_flights(source: str, destination: str, start_date: str,
             dep_airport = segment.get("departure_airport", {})
             arr_airport = segment.get("arrival_airport", {})
 
-            flight_options.append({
-                "airline": segment.get("airline", flight.get("airline", "")),
-                "price": flight.get("price", "N/A"),
-
-                # Departure
-                "departure_airport": (
-                    dep_airport.get("id") or dep_airport.get("name", ""),
-                ),
-                "departure_time": (
-                    dep_airport.get("time") or dep_airport.get("datetime", ""),
-                ),
-
-                # Arrival
-                "arrival_airport": (
-                    arr_airport.get("id") or arr_airport.get("name", ""),
-                ),
-                "arrival_time": (
-                    arr_airport.get("time") or arr_airport.get("datetime", ""),
-                ),
-
-                "duration": (
-                    segment.get("duration", flight.get("duration", "")),
-                ),
-            })
+            flight_options.append(
+                {
+                    "airline": segment.get("airline", flight.get("airline", "")),
+                    "price": flight.get("price", "N/A"),
+                    # Departure
+                    "departure_airport": (dep_airport.get("id") or dep_airport.get("name", ""),),
+                    "departure_time": (dep_airport.get("time") or dep_airport.get("datetime", ""),),
+                    # Arrival
+                    "arrival_airport": (arr_airport.get("id") or arr_airport.get("name", ""),),
+                    "arrival_time": (arr_airport.get("time") or arr_airport.get("datetime", ""),),
+                    "duration": (segment.get("duration", flight.get("duration", "")),),
+                }
+            )
 
         return {"flights": flight_options}
 
@@ -108,9 +98,7 @@ def search_flights(source: str, destination: str, start_date: str,
         return {"flights": []}
 
 
-def search_hotels(
-    city: str, check_in: str, check_out: str,
-    guests: int, hotel_type: str = "cheapest") -> Dict[str, Any]:
+def search_hotels(city: str, check_in: str, check_out: str, guests: int, hotel_type: str = "cheapest") -> Dict[str, Any]:
     """
     Search hotels using SerpAPI.
     Parameters:
@@ -124,10 +112,14 @@ def search_hotels(
     """
     api_key = get_api_key("SERPAPI_API_KEY")
     params = {
-        "engine": "google_hotels", "q": f"{city}",
-        "check_in_date": check_in, "check_out_date": check_out,
-        "adults": guests, "currency": "INR", "api_key": api_key,
-        }
+        "engine": "google_hotels",
+        "q": f"{city}",
+        "check_in_date": check_in,
+        "check_out_date": check_out,
+        "adults": guests,
+        "currency": "INR",
+        "api_key": api_key,
+    }
 
     try:
         # logger.info(
@@ -149,17 +141,7 @@ def search_hotels(
             rate_info = prop.get("rate_per_night", {})
             total_rate = prop.get("total_rate", {})
 
-            hotels.append({
-                "name": prop.get("name"),
-                "address": prop.get("gps_coordinates", {}),  # Using coordinates as address
-                "price": rate_info.get("lowest", "N/A"),
-                "rating": prop.get("overall_rating"),
-                "reviews": prop.get("reviews"),
-                "url": prop.get("link", ""),
-                "type": prop.get("type"),
-                "hotel_class": prop.get("hotel_class"),
-                "total_rate": total_rate.get("lowest", "N/A")
-            })
+            hotels.append({"name": prop.get("name"), "address": prop.get("gps_coordinates", {}), "price": rate_info.get("lowest", "N/A"), "rating": prop.get("overall_rating"), "reviews": prop.get("reviews"), "url": prop.get("link", ""), "type": prop.get("type"), "hotel_class": prop.get("hotel_class"), "total_rate": total_rate.get("lowest", "N/A")})  # Using coordinates as address
 
         return {"hotels": hotels}
 

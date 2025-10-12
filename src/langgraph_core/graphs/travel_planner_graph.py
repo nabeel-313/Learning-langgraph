@@ -1,9 +1,10 @@
-from langgraph.graph import StateGraph, START, END
-from src.langgraph_core.state.travel_planner_states import TravelPlannerState
-from src.langgraph_core.nodes.travel_planner_nodes import TravelPlannerNode
-from src.langgraph_core.tools.tools import get_tools, create_tool_node
-from src.langgraph_core.tools.custom_tools import weather_tool
+from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+
+from src.langgraph_core.nodes.travel_planner_nodes import TravelPlannerNode
+from src.langgraph_core.state.travel_planner_states import TravelPlannerState
+from src.langgraph_core.tools.custom_tools import weather_tool
+from src.langgraph_core.tools.tools import create_tool_node, get_tools
 
 
 class TravelGraphBuilder:
@@ -28,9 +29,9 @@ class TravelGraphBuilder:
         # Travel planning nodes
         self.graph_builder.add_node("travel_node", self.travel_planner_node.travel_node)
         self.graph_builder.add_node("collect_missing_travel_info_node", self.travel_planner_node.collect_missing_travel_info)
-        #self.graph_builder.add_node("flight_node", self.travel_planner_node.flight_node)
-        #self.graph_builder.add_node("hotel_node", self.travel_planner_node.hotel_node)
-        #self.graph_builder.add_node("collect_hotel_info_node", self.travel_planner_node.collect_hotel_info)
+        # self.graph_builder.add_node("flight_node", self.travel_planner_node.flight_node)
+        # self.graph_builder.add_node("hotel_node", self.travel_planner_node.hotel_node)
+        # self.graph_builder.add_node("collect_hotel_info_node", self.travel_planner_node.collect_hotel_info)
         self.graph_builder.add_node("process_travel_confirmation_node", self.travel_planner_node.process_travel_confirmation)
         self.graph_builder.add_node("flight_search_node", self.travel_planner_node.flight_search_node)
         self.graph_builder.add_node("flight_selection_node", self.travel_planner_node.flight_selection_node)
@@ -60,7 +61,7 @@ class TravelGraphBuilder:
                 "weather": "weather_node",
                 "search": "search_node",
                 "chat": "chat_node",
-            }
+            },
         )
 
         # Travel flow
@@ -71,7 +72,7 @@ class TravelGraphBuilder:
                 "collect_missing_travel_info_node": "collect_missing_travel_info_node",
                 "flight_search_node": "flight_search_node",
                 "chat": "chat_node",
-            }
+            },
         )
 
         # Missing info collection
@@ -81,7 +82,7 @@ class TravelGraphBuilder:
             {
                 "process_travel_confirmation": "process_travel_confirmation_node",  # After all info collected
                 "END": END,
-            }
+            },
         )
 
         # Travel confirmation flow
@@ -90,9 +91,9 @@ class TravelGraphBuilder:
             lambda state: state.get("route", "END"),
             {
                 "flight_search_node": "flight_search_node",  # After user confirms
-                "chat_node": "chat_node",      # If user says no
+                "chat_node": "chat_node",  # If user says no
                 "END": END,
-            }
+            },
         )
 
         # Flight search to selection flow
@@ -103,7 +104,7 @@ class TravelGraphBuilder:
                 "flight_selection_node": "flight_selection_node",  # After displaying flights
                 "hotel_search_node": "hotel_search_node",  # If no flights found
                 "END": END,
-            }
+            },
         )
 
         # Flight selection flow
@@ -114,7 +115,7 @@ class TravelGraphBuilder:
             {
                 "hotel_search_node": "hotel_search_node",  # After flight selection
                 "END": END,
-            }
+            },
         )
 
         # Hotel search to selection flow
@@ -123,9 +124,9 @@ class TravelGraphBuilder:
             lambda state: state.get("route", "END"),
             {
                 "collect_hotel_info_node": "collect_hotel_info_node",
-                "hotel_selection_node" : "hotel_selection_node",  # After displaying hotels
+                "hotel_selection_node": "hotel_selection_node",  # After displaying hotels
                 "END": END,
-            }
+            },
         )
         # Hotel info collection flow
         self.graph_builder.add_conditional_edges(
@@ -135,7 +136,7 @@ class TravelGraphBuilder:
                 "collect_hotel_info_node": "collect_hotel_info_node",  # Self-loop
                 "hotel_search_node": "hotel_search_node",  # After all info collected
                 "END": END,
-            }
+            },
         )
 
         # Hotel selection flow
@@ -146,7 +147,7 @@ class TravelGraphBuilder:
                 "generate_itinerary_node": "generate_itinerary_node",
                 "hotel_selection_node": "hotel_selection_node",  # Self-loop for invalid selections
                 "END": END,  # Valid selection completes the flow
-            }
+            },
         )
 
         # self.graph_builder.add_conditional_edges(
@@ -175,14 +176,10 @@ class TravelGraphBuilder:
         self.graph_builder.add_edge("search_node", END)
         self.graph_builder.add_edge("generate_itinerary_node", END)
 
-
-
-
     def build(self):
         """Build and compile the travel planner graph."""
         self._add_nodes()
         self._add_edges()
         compiled_graph = self.graph_builder.compile()
-        compiled_graph.get_graph().draw_mermaid_png(
-           output_file_path=r"./logs/travel_routing_3.png")
+        compiled_graph.get_graph().draw_mermaid_png(output_file_path=r"./logs/travel_routing_3.png")
         return compiled_graph

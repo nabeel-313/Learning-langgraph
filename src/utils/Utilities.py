@@ -1,14 +1,15 @@
+import os
+import re
+import sys
+from datetime import timedelta
+
+import spacy
+import yaml
+from dateutil import parser as date_parser
+from dotenv import find_dotenv, load_dotenv
 
 from src.exceptions import ExceptionError
 from src.loggers import logging
-import os
-import sys
-import re
-import spacy
-from dateutil import parser as date_parser
-from datetime import timedelta
-import yaml
-from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
@@ -17,8 +18,7 @@ def get_api_key(api_key_name):
     return os.environ[api_key_name]
 
 
-def load_llm_config(provider_name: str,
-                    config_path=r".\src\config\llm_configs.yml"):
+def load_llm_config(provider_name: str, config_path=r".\src\config\llm_configs.yml"):
     """
     Load configuration for a specific LLM provider.
 

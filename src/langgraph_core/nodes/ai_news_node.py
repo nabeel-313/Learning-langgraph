@@ -1,5 +1,5 @@
-from tavily import TavilyClient
 from langchain_core.prompts import ChatPromptTemplate
+from tavily import TavilyClient
 
 
 class AINewsNode:
@@ -72,12 +72,7 @@ class AINewsNode:
             ]
         )
 
-        articles_str = "\n\n".join(
-            [
-                f"Content: {item.get('content', '')}\nURL: {item.get('url', '')}\nDate: {item.get('published_date', '')}"
-                for item in news_items
-            ]
-        )
+        articles_str = "\n\n".join([f"Content: {item.get('content', '')}\nURL: {item.get('url', '')}\nDate: {item.get('published_date', '')}" for item in news_items])
 
         response = self.llm.invoke(prompt_template.format(articles=articles_str))
         state["summary"] = response.content

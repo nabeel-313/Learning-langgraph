@@ -36,9 +36,7 @@ class Logger:
     @staticmethod
     def _get_formatter():
         """Return a logging formatter with consistent format."""
-        return logging.Formatter(
-            "[ %(asctime)s ] %(name)s - %(levelname)s - %(message)s"
-        )
+        return logging.Formatter("[ %(asctime)s ] %(name)s - %(levelname)s - %(message)s")
 
     def get_logger(self):
         """Return the logger instance."""
