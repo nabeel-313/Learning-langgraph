@@ -1,5 +1,4 @@
 from fastapi import Request, HTTPException
-from src.cache.session_manager import session_manager
 from src.database.databases import Database
 from src.auth.authentication import AuthenticationService
 

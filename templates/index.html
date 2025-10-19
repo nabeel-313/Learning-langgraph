@@ -10,6 +10,45 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <!-- Enhanced authentication check script -->
+    <script>
+        // Enhanced authentication check
+        const sessionToken = localStorage.getItem('session_token');
+        const userData = localStorage.getItem('user_data');
+
+        console.log('🔍 Page load - Authentication check');
+        console.log('Session token:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'Missing');
+        console.log('User data:', userData ? 'Exists' : 'Missing');
+
+        if (!sessionToken || !userData) {
+            console.log('❌ No session found, redirecting to login');
+            window.location.href = '/login';
+        } else {
+            console.log('✅ Session found, proceeding to chat');
+
+            // Store session token for use in fetch requests
+            window.sessionToken = sessionToken;
+            window.USER_SESSION_TOKEN = sessionToken;
+
+            try {
+                // Update UI with user info immediately
+                const user = JSON.parse(userData);
+                document.addEventListener('DOMContentLoaded', function() {
+                    const userNameElement = document.getElementById('userName');
+                    const userInfoElement = document.getElementById('userInfo');
+
+                    if (userNameElement && userInfoElement) {
+                        userNameElement.textContent = user.name || user.email;
+                        userInfoElement.classList.remove('hidden');
+                    }
+                });
+            } catch (error) {
+                console.error('Error parsing user data:', error);
+                window.location.href = '/login';
+            }
+        }
+    </script>
+
     <!-- Navigation Bar -->
     <nav class="nav-bar fixed top-0 w-full z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -19,14 +58,17 @@
                     <span class="text-xl font-bold text-gray-800">Travel AI Assistant</span>
                 </div>
                 <div class="flex items-center gap-4">
+                    <!-- User Info -->
+                    <div id="userInfo" class="hidden flex items-center gap-3">
+                        <span class="text-gray-700">Welcome, <span id="userName"></span>!</span>
+                        <button onclick="logout()" class="text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
+
+                    <!-- Chat Controls -->
                     <button class="text-gray-600 hover:text-gray-800 transition-colors" onclick="clearChat()">
                         <i class="fas fa-trash"></i>
-                    </button>
-                    <button class="text-gray-600 hover:text-gray-800 transition-colors">
-                        <i class="fas fa-history"></i>
-                    </button>
-                    <button class="text-gray-600 hover:text-gray-800 transition-colors">
-                        <i class="fas fa-cog"></i>
                     </button>
                 </div>
             </div>

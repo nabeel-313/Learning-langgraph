@@ -11,7 +11,6 @@ class AuthenticationService:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-
     def register_user(self, email: str, password: str, name: str = None) -> dict:
         """Register a new user"""
         try:
@@ -63,10 +62,7 @@ class AuthenticationService:
             if not user:
                 logger.warning(f"No user found with email: {email}")
                 return {"success": False, "error": "Invalid credentials"}
-
-            logger.info("Stored password hash:")
             logger.info("Verifying password...")
-
             # Verify password
             password_valid = password_utils.verify_password(password, user.password_hash)
             logger.info(f"Password verification result: {password_valid}")

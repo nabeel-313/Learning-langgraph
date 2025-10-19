@@ -130,50 +130,48 @@
 
     <script>
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
+    e.preventDefault();
 
-            const formData = new FormData(this);
-            const data = {
-                email: formData.get('email'),
-                password: formData.get('password')
-            };
+    const formData = new FormData(this);
+    const data = {
+        email: formData.get('email'),
+        password: formData.get('password')
+    };
 
-            // Clear previous messages
-            document.getElementById('errorMessage').style.display = 'none';
+    // Clear previous messages
+    document.getElementById('errorMessage').style.display = 'none';
 
-            try {
-                const response = await fetch('/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    // Store session token and user data
-                    localStorage.setItem('session_token', result.session_token);
-                    localStorage.setItem('user_data', JSON.stringify(result.user));
-
-                    // Redirect to main page
-                    window.location.href = '/';
-                } else {
-                    document.getElementById('errorMessage').textContent = result.message || 'Login failed';
-                    document.getElementById('errorMessage').style.display = 'block';
-                }
-            } catch (error) {
-                document.getElementById('errorMessage').textContent = 'Network error. Please try again.';
-                document.getElementById('errorMessage').style.display = 'block';
-                console.error('Login error:', error);
-            }
+    try {
+        const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
         });
 
-        // Check if user is already logged in
-        if (localStorage.getItem('session_token')) {
+        const result = await response.json();
+
+        if (result.success) {
+            // Store session token in localStorage AND cookie
+            localStorage.setItem('session_token', result.session_token);
+            localStorage.setItem('user_data', JSON.stringify(result.user));
+
+            // Set cookie for session token (sent automatically with requests)
+            document.cookie = `session_token=${result.session_token}; path=/; max-age=86400; samesite=lax`;
+
+            // Redirect to main page
             window.location.href = '/';
+        } else {
+            document.getElementById('errorMessage').textContent = result.message || 'Login failed';
+            document.getElementById('errorMessage').style.display = 'block';
         }
+    } catch (error) {
+        document.getElementById('errorMessage').textContent = 'Network error. Please try again.';
+        document.getElementById('errorMessage').style.display = 'block';
+        console.error('Login error:', error);
+    }
+});
     </script>
 </body>
 </html>

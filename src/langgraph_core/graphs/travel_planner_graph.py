@@ -29,9 +29,6 @@ class TravelGraphBuilder:
         # Travel planning nodes
         self.graph_builder.add_node("travel_node", self.travel_planner_node.travel_node)
         self.graph_builder.add_node("collect_missing_travel_info_node", self.travel_planner_node.collect_missing_travel_info)
-        # self.graph_builder.add_node("flight_node", self.travel_planner_node.flight_node)
-        # self.graph_builder.add_node("hotel_node", self.travel_planner_node.hotel_node)
-        # self.graph_builder.add_node("collect_hotel_info_node", self.travel_planner_node.collect_hotel_info)
         self.graph_builder.add_node("process_travel_confirmation_node", self.travel_planner_node.process_travel_confirmation)
         self.graph_builder.add_node("flight_search_node", self.travel_planner_node.flight_search_node)
         self.graph_builder.add_node("flight_selection_node", self.travel_planner_node.flight_selection_node)
@@ -107,8 +104,6 @@ class TravelGraphBuilder:
             },
         )
 
-        # Flight selection flow
-        # Flight selection to hotel flow
         self.graph_builder.add_conditional_edges(
             "flight_selection_node",
             lambda state: state.get("route", "END"),
@@ -149,26 +144,6 @@ class TravelGraphBuilder:
                 "END": END,  # Valid selection completes the flow
             },
         )
-
-        # self.graph_builder.add_conditional_edges(
-        #     "hotel_selection_node",
-        #     lambda state: state.get("route", "END"),
-        #     {
-        #         "generate_itinerary_node": "generate_itinerary_node",  # After hotel selection
-        #         "hotel_selection_node": "hotel_selection_node",  # Self-loop for invalid selections
-        #         "END": END,
-        #     }
-        # )
-
-        # # Flight to hotel flow
-        # self.graph_builder.add_conditional_edges(
-        #     "flight_selection_node",  # Changed from flight_node
-        #     lambda state: state.get("route", "END"),
-        #     {
-        #         "hotel_node": "hotel_node",
-        #         "END": END,
-        #     }
-        # )
 
         # End points
         self.graph_builder.add_edge("chat_node", END)

@@ -20,11 +20,11 @@ class RedisClient:
                 socket_connect_timeout=5,
                 socket_timeout=5
             )
-            # Test connection
+            # connection checking
             self.client.ping()
-            logger.info("✅ Redis connected successfully")
+            logger.info("Redis connected successfully")
         except Exception as e:
-            logger.error(f"❌ Redis connection failed: {e}")
+            logger.error(f"Redis connection failed: {e}")
             self.client = None
 
     def is_connected(self):
@@ -75,7 +75,19 @@ class RedisClient:
     def get_json(self, key: str):
         """Get JSON object"""
         data = self.get(key)
-        return json.loads(data) if data else None
+        logger.info(f" Redis get_json - Key: {key}, Raw data: {data}")
+
+        if not data:
+            return None
+
+        try:
+            parsed_data = json.loads(data)
+            logger.info(f"Redis get_json - loaded successfully: {type(parsed_data)}")
+            return parsed_data
+        except json.JSONDecodeError as e:
+            logger.error(f"Redis get_json - JSON decode error: {e}")
+            logger.error(f"Problematic data: {data}")
+            return None
 
     def exists(self, key: str):
         """Check if key exists"""
@@ -88,5 +100,4 @@ class RedisClient:
             return False
 
 
-# Global Redis instance
 redis_client = RedisClient()

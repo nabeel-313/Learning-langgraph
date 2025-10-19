@@ -1,3 +1,48 @@
+// Check authentication on page load
+function checkAuthentication() {
+    const sessionToken = localStorage.getItem('session_token');
+    const userData = localStorage.getItem('user_data');
+
+    if (sessionToken && userData) {
+        // User is logged in - show user info
+        const user = JSON.parse(userData);
+        document.getElementById('userName').textContent = user.name || user.email;
+        document.getElementById('userInfo').classList.remove('hidden');
+    } else {
+        // Not logged in - redirect to login
+        window.location.href = '/login';
+    }
+}
+
+// Logout function
+// Logout function - update to clear cookies too
+async function logout() {
+    const sessionToken = localStorage.getItem('session_token');
+
+    if (sessionToken) {
+        try {
+            await fetch('/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ session_token: sessionToken })
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    }
+
+    // Clear local storage AND cookies
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('user_data');
+
+    // Clear the session cookie by setting expiry to past date
+    document.cookie = "session_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
+    window.location.href = '/login';
+}
+
 // Auto-resize textarea
 function initializeAutoResize() {
     const messageInput = document.getElementById('messageInput');
@@ -119,13 +164,28 @@ async function sendMessage() {
     sendButton.disabled = true;
 
     try {
+        const sessionToken = localStorage.getItem('session_token');
+
+        if (!sessionToken) {
+            throw new Error('No session token found');
+        }
+
         const response = await fetch('/data', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`  // Add session token
             },
             body: JSON.stringify({ data: message })
         });
+
+        if (response.status === 401) {
+            // Session expired - redirect to login
+            localStorage.removeItem('session_token');
+            localStorage.removeItem('user_data');
+            window.location.href = '/login';
+            return;
+        }
 
         const data = await response.json();
 
@@ -139,7 +199,14 @@ async function sendMessage() {
         }
     } catch (error) {
         removeTypingIndicator();
-        addMessage('bot', 'Connection error. Please check your internet connection.');
+        if (error.message === 'No session token found') {
+            addMessage('bot', 'Session expired. Please login again.');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+        } else {
+            addMessage('bot', 'Connection error. Please check your internet connection.');
+        }
     }
 
     sendButton.disabled = false;
@@ -208,6 +275,7 @@ function scrollToBottom() {
 
 // Initialize all event listeners when page loads
 document.addEventListener('DOMContentLoaded', function() {
+    checkAuthentication();  // Check if user is logged in
     initializeAutoResize();
     initializeFormHandler();
     initializeEnterKeyHandler();
@@ -215,3 +283,135 @@ document.addEventListener('DOMContentLoaded', function() {
     scrollToBottom();
 });
 
+// Check authentication on page load
+// Check authentication on page load
+function checkAuthentication() {
+    const sessionToken = localStorage.getItem('session_token');
+    const userData = localStorage.getItem('user_data');
+
+    console.log('🔍 Checking authentication...');
+    console.log('Session token in localStorage:', sessionToken ? 'Exists' : 'Missing');
+    console.log('User data in localStorage:', userData ? 'Exists' : 'Missing');
+
+    if (sessionToken && userData) {
+        // User is logged in - show user info
+        try {
+            const user = JSON.parse(userData);
+            document.getElementById('userName').textContent = user.name || user.email;
+            document.getElementById('userInfo').classList.remove('hidden');
+            console.log('✅ User authenticated:', user.email);
+
+            // Store for API calls
+            window.sessionToken = sessionToken;
+            window.USER_SESSION_TOKEN = sessionToken;
+        } catch (error) {
+            console.error('Error parsing user data:', error);
+            redirectToLogin();
+        }
+    } else {
+        // Not logged in - redirect to login
+        redirectToLogin();
+    }
+}
+
+function redirectToLogin() {
+    console.log('❌ No session found, redirecting to login');
+    window.location.href = '/login';
+}
+
+// Logout function - update to clear cookies too
+async function logout() {
+    const sessionToken = localStorage.getItem('session_token');
+
+    if (sessionToken) {
+        try {
+            await fetch('/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ session_token: sessionToken })
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    }
+
+    // Clear local storage AND cookies
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('user_data');
+
+    // Clear the session cookie by setting expiry to past date
+    document.cookie = "session_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
+    window.location.href = '/login';
+}
+
+// Update sendMessage to use the session token
+async function sendMessage() {
+    const messageInput = document.getElementById('messageInput');
+    const message = messageInput.value.trim();
+
+    if (!message) return;
+
+    // Add user message to chat
+    addMessage('user', message);
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+
+    // Show typing indicator
+    showTypingIndicator();
+
+    // Disable send button
+    const sendButton = document.getElementById('sendButton');
+    sendButton.disabled = true;
+
+    try {
+        const sessionToken = window.USER_SESSION_TOKEN || localStorage.getItem('session_token');
+
+        if (!sessionToken) {
+            throw new Error('No session token found');
+        }
+
+        const response = await fetch('/data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionToken}`,
+                'X-Session-Token': sessionToken  // Add custom header as backup
+            },
+            body: JSON.stringify({ data: message })
+        });
+
+        if (response.status === 401) {
+            // Session expired - redirect to login
+            localStorage.removeItem('session_token');
+            localStorage.removeItem('user_data');
+            window.location.href = '/login';
+            return;
+        }
+
+        const data = await response.json();
+
+        // Remove typing indicator
+        removeTypingIndicator();
+
+        if (data.response) {
+            addMessage('bot', data.message || data.response);
+        } else {
+            addMessage('bot', 'Sorry, I encountered an error. Please try again.');
+        }
+    } catch (error) {
+        removeTypingIndicator();
+        if (error.message === 'No session token found') {
+            addMessage('bot', 'Session expired. Please login again.');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+        } else {
+            addMessage('bot', 'Connection error. Please check your internet connection.');
+        }
+    }
+
+    sendButton.disabled = false;
+}

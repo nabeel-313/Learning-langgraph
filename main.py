@@ -1,16 +1,17 @@
 from ai_travel_planner import langgraph_chatbot
 from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import uvicorn
-
-# Import our database and auth services
-from src.database.databases import database  # ✅ Fixed import
+from src.database.databases import database
 from src.auth.authentication import AuthenticationService
 from src.cache.session_manager import session_manager
+from src.loggers import Logger
+
+logger = Logger(__name__).get_logger()
 
 app = FastAPI(title="Travel AI Assistant", debug=True)
 
@@ -20,9 +21,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Setup templates
 templates = Jinja2Templates(directory="templates")
 
+
 # Pydantic Models
-
-
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
@@ -53,17 +53,42 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+try:
+    database.create_tables()
+except Exception as e:
+    print(f"Error creating tables: {e}")
+
+
 # Session Helper Functions
 def get_session_token(request: Request) -> Optional[str]:
     """Extract session token from request"""
+    # Check cookies first (for browser requests)
+    cookies = request.cookies
+    if "session_token" in cookies:
+        token = cookies["session_token"]
+        # print("Found session token in cookies...")
+        return token
+
+    # Check Authorization header
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        return auth_header.replace("Bearer ", "")
+        token = auth_header.replace("Bearer ", "")
+        # print("Found session token in Authorization header...")
+        return token
 
-    session_token = request.cookies.get("session_token")
+    # Check X-Session-Token header (for JavaScript)
+    x_session_token = request.headers.get("X-Session-Token")
+    if x_session_token:
+        # print("Found session token in X-Session-Token header...")
+        return x_session_token
+
+    # Check query parameter (fallback)
+    session_token = request.query_params.get("session_token")
     if session_token:
+        # print("Found session token in query parameter...")
         return session_token
 
+    # print("No session token found in request")
     return None
 
 
@@ -73,31 +98,52 @@ async def get_current_user_from_request(request: Request):
     if not session_token:
         return None
 
-    with database.get_session() as db:  # ✅ Fixed - using instance
+    with database.get_session() as db:
         auth_service = AuthenticationService(db)
-        return auth_service.get_current_user(session_token)
+        user = auth_service.get_current_user(session_token)
+        if user:
+            logger.info(f"User found: {user['email']} (ID: {user['id']})")
+        else:
+            logger.error("No user found for session token")
+        return user
 
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    """
+    Renders the main index page ONLY if user is logged in.
+    """
+    # print("Checking session for request to /")
+    user = await get_current_user_from_request(request)
+    if not user:
+        logger.debug("No user found, redirecting to login")
+        return RedirectResponse(url="/login")
+
+    logger.info(f"User authenticated: {user['email']}, showing chat")
+    return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    """
+    Renders the login page.
+    """
     return templates.TemplateResponse("login.html", {"request": request})
 
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
+    """
+    Renders the registration page.
+    """
     return templates.TemplateResponse("register.html", {"request": request})
 
 
 @app.post("/auth/register", response_model=AuthResponse)
 async def register(user_data: UserRegister):
     """Register a new user"""
-    with database.get_session() as db:  # ✅ Fixed - using instance
+    with database.get_session() as db:
         auth_service = AuthenticationService(db)
 
         result = auth_service.register_user(
@@ -117,6 +163,7 @@ async def register(user_data: UserRegister):
             )
 
             if session_token:
+                logger.info(f"Registration successful - Session created for {user_data_dict}")
                 return AuthResponse(
                     success=True,
                     message="Registration successful",
@@ -137,7 +184,7 @@ async def register(user_data: UserRegister):
 @app.post("/auth/login", response_model=AuthResponse)
 async def login(credentials: UserLogin):
     """Login user and create session"""
-    with database.get_session() as db:  # ✅ Fixed - using instance
+    with database.get_session() as db:
         auth_service = AuthenticationService(db)
 
         result = auth_service.login_user(
@@ -147,6 +194,7 @@ async def login(credentials: UserLogin):
 
         if result["success"]:
             user = auth_service.get_current_user(result["session_token"])
+            logger.info(f"Login successful for user: {user}")
 
             return AuthResponse(
                 success=True,
@@ -174,7 +222,7 @@ async def logout(session_token: str):
 @app.get("/auth/me", response_model=UserResponse)
 async def get_current_user(session_token: str):
     """Get current user details"""
-    with database.get_session() as db:  # ✅ Fixed - using instance
+    with database.get_session() as db:
         auth_service = AuthenticationService(db)
         user = auth_service.get_current_user(session_token)
 
@@ -187,55 +235,33 @@ async def get_current_user(session_token: str):
         return UserResponse(**user)
 
 
-@app.post("/auth/change-password")
-async def change_password(request: ChangePasswordRequest):
-    """Change user password"""
-    with database.get_session() as db:  # ✅ Fixed - using instance
-        auth_service = AuthenticationService(db)
-
-        result = auth_service.change_password(
-            session_token=request.session_token,
-            current_password=request.current_password,
-            new_password=request.new_password
-        )
-
-        return result
-
-
 @app.post('/data')
 async def get_data(request: Request):
+    """
+    Handles POST requests to process user data - REQUIRES AUTHENTICATION
+    """
+    # Check if user is authenticated
+    user = await get_current_user_from_request(request)
+    if not user:
+        return JSONResponse(
+            {"error": "Authentication required"},
+            status_code=401
+        )
+
     data = await request.json()
     text = data.get('data')
     user_input = text
-
-    user = await get_current_user_from_request(request)
-    user_id = user["id"] if user else None
-
-    print(f"User input: {user_input} (User ID: {user_id})")
-
+    # Pass user context to chatbot
     out = langgraph_chatbot(user_input)
-
-    print("---" * 100)
-    print(out)
-    print("---" * 100)
-
     response_message = out["output"] if isinstance(out, dict) and "output" in out else str(out)
-
+    logger.info(f"AI message: {response_message}")
     return JSONResponse({
         "response": True,
         "message": response_message,
-        "user_authenticated": user_id is not None
+        "user_authenticated": True,
+        "user_name": user.get("name")
     })
 
-# Simple connection test
-try:
-    from src.cache.redis_client import redis_client
-    if redis_client.is_connected():
-        print("✅ Redis connected successfully")
-    else:
-        print("❌ Redis connection failed")
-except Exception as e:
-    print(f"❌ Redis connection error: {e}")
 
 if __name__ == '__main__':
     uvicorn.run("main:app", host="127.0.0.1", port=5000, reload=True)
