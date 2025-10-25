@@ -3,7 +3,7 @@ from src.database.databases import Database
 from src.auth.authentication import AuthenticationService
 
 
-def get_current_user(request: Request):
+async def get_current_user(request: Request):
     """Middleware to get current user from session"""
     session_token = request.headers.get("Authorization")
 
@@ -14,13 +14,13 @@ def get_current_user(request: Request):
 
     with Database.get_session() as db:
         auth_service = AuthenticationService(db)
-        user = auth_service.get_current_user(session_token)
+        user = await auth_service.get_current_user(session_token)
         return user
 
 
-def auth_required(request: Request):
+async def auth_required(request: Request):
     """Middleware that requires authentication"""
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user

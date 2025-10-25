@@ -1,81 +1,84 @@
-import redis
+import redis.asyncio as redis
 from config.settings import settings
 import json
 from src.loggers import Logger
 
 logger = Logger(__name__).get_logger()
 
-
-class RedisClient:
+class AsyncRedisClient:
     def __init__(self):
         self.redis_url = settings.REDIS_URL
         self.client = None
-        self._connect()
+        self.pool = None
 
-    def _connect(self):
+    async def connect(self):
+        """Async connection setup"""
         try:
-            self.client = redis.Redis.from_url(
+            self.pool = redis.ConnectionPool.from_url(
                 self.redis_url,
-                decode_responses=True,  # Auto decode to strings
-                socket_connect_timeout=5,
-                socket_timeout=5
+                max_connections=20,
+                decode_responses=True
             )
-            # connection checking
-            self.client.ping()
-            logger.info("Redis connected successfully")
+            self.client = redis.Redis(connection_pool=self.pool)
+            await self.client.ping()
+            logger.info("Async Redis connected with connection pooling")
         except Exception as e:
             logger.error(f"Redis connection failed: {e}")
             self.client = None
 
-    def is_connected(self):
+    async def is_connected(self):
         try:
-            return self.client and self.client.ping()
+            if self.client:
+                await self.client.ping()
+                return True
+            return False
         except:
             return False
 
-    def set(self, key: str, value: str, expire: int = None):
-        """Set key-value pair with optional expiration (seconds)"""
-        if not self.is_connected():
+    async def set(self, key: str, value: str, expire: int = None):
+        """Async set key-value pair with optional expiration"""
+        if not await self.is_connected():
             return False
         try:
             if expire:
-                self.client.setex(key, expire, value)
+                await self.client.setex(key, expire, value)
             else:
-                self.client.set(key, value)
+                await self.client.set(key, value)
             return True
         except Exception as e:
             logger.error(f"Redis set error: {e}")
             return False
 
-    def get(self, key: str):
-        """Get value by key"""
-        if not self.is_connected():
+    async def get(self, key: str):
+        """Async get value by key"""
+        if not await self.is_connected():
             return None
         try:
-            return self.client.get(key)
+            return await self.client.get(key)
         except Exception as e:
             logger.error(f"Redis get error: {e}")
             return None
 
-    def delete(self, key: str):
-        """Delete key"""
-        if not self.is_connected():
+    async def delete(self, key: str):
+        """Async delete key"""
+        if not await self.is_connected():
             return False
         try:
-            self.client.delete(key)
+            await self.client.delete(key)
             return True
         except Exception as e:
             logger.error(f"Redis delete error: {e}")
             return False
 
-    def set_json(self, key: str, value: dict, expire: int = None):
-        """Set JSON object"""
-        return self.set(key, json.dumps(value), expire)
+    async def set_json(self, key: str, value: dict, expire: int = None):
+        """Async set JSON object"""
+        logger.info(f"Creating cache for {value}")
+        return await self.set(key, json.dumps(value), expire)
 
-    def get_json(self, key: str):
-        """Get JSON object"""
-        data = self.get(key)
-        logger.info(f" Redis get_json - Key: {key}, Raw data: {data}")
+    async def get_json(self, key: str):
+        """Async get JSON object"""
+        data = await self.get(key)
+        logger.info(f"Redis get_json -  Raw data: {data}") # can add key:{key}
 
         if not data:
             return None
@@ -89,15 +92,19 @@ class RedisClient:
             logger.error(f"Problematic data: {data}")
             return None
 
-    def exists(self, key: str):
-        """Check if key exists"""
-        if not self.is_connected():
+    async def exists(self, key: str):
+        """Async check if key exists"""
+        if not await self.is_connected():
             return False
         try:
-            return self.client.exists(key) == 1
+            return await self.client.exists(key) == 1
         except Exception as e:
             logger.error(f"Redis exists error: {e}")
             return False
 
+# ✅ Global async instance
+redis_client = AsyncRedisClient()
 
-redis_client = RedisClient()
+# ✅ Async initialization (call this at app startup)
+async def init_redis():
+    await redis_client.connect()

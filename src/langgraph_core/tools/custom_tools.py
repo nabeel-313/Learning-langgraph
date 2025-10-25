@@ -1,8 +1,7 @@
 from typing import Any, Dict
 
-import requests
+import aiohttp
 from langchain.tools import StructuredTool
-
 from src.exceptions import ExceptionError
 from src.langgraph_core.schemas.all_schems import WeatherResponse, WindInfo
 from src.loggers import Logger
@@ -11,7 +10,7 @@ from src.utils.Utilities import get_api_key
 logger = Logger(__name__).get_logger()
 
 
-def weather_information(city_name: str) -> WeatherResponse:
+async def weather_information(city_name: str) -> WeatherResponse:
     """Generates a weather report for a given city."""
     base_url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
@@ -19,20 +18,24 @@ def weather_information(city_name: str) -> WeatherResponse:
         "appid": get_api_key("OPENWEATHERMAP_API_KEY"),
         "units": "metric",
     }
-    # print("weather node called")
-    response = requests.get(base_url, params=params)
 
-    if response.status_code != 200:
-        raise ValueError(f"Error fetching weather: {response.text}")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(base_url, params=params) as response:
+                if response.status != 200:
+                    raise ValueError(f"Error fetching weather: {await response.text()}")
 
-    data = response.json()
-    info = WeatherResponse(
-        city=data["name"],
-        temp=data["main"]["temp"],
-        unit="Celsius",
-        wind=WindInfo(speed=data["wind"]["speed"], direction=data["wind"]["deg"]),
-    )
-    return info.dict()
+                data = await response.json()
+                info = WeatherResponse(
+                    city=data["name"],
+                    temp=data["main"]["temp"],
+                    unit="Celsius",
+                    wind=WindInfo(speed=data["wind"]["speed"], direction=data["wind"]["deg"]),
+                )
+                return info.dict()
+    except Exception as e:
+        logger.error(f"Error in weather_information: {e}")
+        raise
 
 
 weather_tool = StructuredTool.from_function(
@@ -43,7 +46,7 @@ weather_tool = StructuredTool.from_function(
 )
 
 
-def search_flights(source: str, destination: str, start_date: str, end_date: str, flight_type: str = "cheapest") -> Dict[str, Any]:
+async def search_flights(source: str, destination: str, start_date: str, end_date: str, flight_type: str = "cheapest") -> Dict[str, Any]:
     """
     Search flights using SerpAPI.
     """
@@ -60,9 +63,10 @@ def search_flights(source: str, destination: str, start_date: str, end_date: str
 
     try:
         logger.info("Searching flights from %s to %s", source, destination)
-        response = requests.get("https://serpapi.com/search", params=params)
-        response.raise_for_status()
-        results = response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://serpapi.com/search", params=params) as response:
+                response.raise_for_status()
+                results = await response.json()
 
         # Decide which list of flights to use
         if flight_type == "cheapest":
@@ -82,12 +86,12 @@ def search_flights(source: str, destination: str, start_date: str, end_date: str
                     "airline": segment.get("airline", flight.get("airline", "")),
                     "price": flight.get("price", "N/A"),
                     # Departure
-                    "departure_airport": (dep_airport.get("id") or dep_airport.get("name", ""),),
-                    "departure_time": (dep_airport.get("time") or dep_airport.get("datetime", ""),),
+                    "departure_airport": (dep_airport.get("id") or dep_airport.get("name", "")),
+                    "departure_time": (dep_airport.get("time") or dep_airport.get("datetime", "")),
                     # Arrival
-                    "arrival_airport": (arr_airport.get("id") or arr_airport.get("name", ""),),
-                    "arrival_time": (arr_airport.get("time") or arr_airport.get("datetime", ""),),
-                    "duration": (segment.get("duration", flight.get("duration", "")),),
+                    "arrival_airport": (arr_airport.get("id") or arr_airport.get("name", "")),
+                    "arrival_time": (arr_airport.get("time") or arr_airport.get("datetime", "")),
+                    "duration": (segment.get("duration", flight.get("duration", ""))),
                 }
             )
 
@@ -98,7 +102,7 @@ def search_flights(source: str, destination: str, start_date: str, end_date: str
         return {"flights": []}
 
 
-def search_hotels(city: str, check_in: str, check_out: str, guests: int, hotel_type: str = "cheapest") -> Dict[str, Any]:
+async def search_hotels(city: str, check_in: str, check_out: str, guests: int, hotel_type: str = "cheapest") -> Dict[str, Any]:
     """
     Search hotels using SerpAPI.
     Parameters:
@@ -122,13 +126,10 @@ def search_hotels(city: str, check_in: str, check_out: str, guests: int, hotel_t
     }
 
     try:
-        # logger.info(
-        #     "Searching hotels in %s  for %d guests from %s to %s",
-        #     city, guests, check_in, check_out
-        # )
-        response = requests.get("https://serpapi.com/search", params=params)
-        response.raise_for_status()
-        data = response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://serpapi.com/search", params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
 
         # Extract properties list (correct field name in the API response)
         properties_list = data.get("properties", [])
@@ -141,12 +142,21 @@ def search_hotels(city: str, check_in: str, check_out: str, guests: int, hotel_t
             rate_info = prop.get("rate_per_night", {})
             total_rate = prop.get("total_rate", {})
 
-            hotels.append({"name": prop.get("name"), "address": prop.get("gps_coordinates", {}), "price": rate_info.get("lowest", "N/A"), "rating": prop.get("overall_rating"), "reviews": prop.get("reviews"), "url": prop.get("link", ""), "type": prop.get("type"), "hotel_class": prop.get("hotel_class"), "total_rate": total_rate.get("lowest", "N/A")})  # Using coordinates as address
+            hotels.append({
+                "name": prop.get("name"),
+                "address": prop.get("gps_coordinates", {}),
+                "price": rate_info.get("lowest", "N/A"),
+                "rating": prop.get("overall_rating"),
+                "reviews": prop.get("reviews"),
+                "url": prop.get("link", ""),
+                "type": prop.get("type"),
+                "hotel_class": prop.get("hotel_class"),
+                "total_rate": total_rate.get("lowest", "N/A")
+            })
 
         return {"hotels": hotels}
 
     except Exception as e:
-
         custom_err = ExceptionError(e)
         logger.error("Error fetching hotels: %s", custom_err)
         return {"hotels": []}

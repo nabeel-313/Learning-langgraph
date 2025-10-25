@@ -11,7 +11,7 @@ class AuthenticationService:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-    def register_user(self, email: str, password: str, name: str = None) -> dict:
+    async def register_user(self, email: str, password: str, name: str = None) -> dict:
         """Register a new user"""
         try:
             logger.info(f"Registration attempt for email: {email}")
@@ -50,20 +50,18 @@ class AuthenticationService:
             logger.error(f"Registration error: {e}", exc_info=True)
             return {"success": False, "error": "Registration failed"}
 
-    def login_user(self, email: str, password: str) -> dict:
+    async def login_user(self, email: str, password: str) -> dict:
         """Authenticate user and create session"""
         try:
             logger.info(f"Login attempt for email: {email}")
-
-            # Find user by email
             user = self.db.query(User).filter(User.email == email).first()
             logger.info(f"User found: {user is not None}")
 
             if not user:
                 logger.warning(f"No user found with email: {email}")
                 return {"success": False, "error": "Invalid credentials"}
+
             logger.info("Verifying password...")
-            # Verify password
             password_valid = password_utils.verify_password(password, user.password_hash)
             logger.info(f"Password verification result: {password_valid}")
 
@@ -77,8 +75,7 @@ class AuthenticationService:
                 "name": user.name
             }
             logger.info(f"Creating session for user ID: {user.id}")
-
-            session_token = session_manager.create_session(user.id, user_data)
+            session_token = await session_manager.create_session(user.id, user_data)
             logger.info(f"Session created: {session_token is not None}")
 
             if not session_token:
@@ -96,13 +93,13 @@ class AuthenticationService:
             logger.error(f"Login error details: {e}", exc_info=True)
             return {"success": False, "error": "Login failed"}
 
-    def logout_user(self, session_token: str) -> bool:
+    async def logout_user(self, session_token: str) -> bool:
         """Logout user by invalidating session"""
-        return session_manager.delete_session(session_token)
+        return await session_manager.delete_session(session_token)
 
-    def get_current_user(self, session_token: str) -> dict:
+    async def get_current_user(self, session_token: str) -> dict:
         """Get current user from session"""
-        session_data = session_manager.get_session(session_token)
+        session_data = await session_manager.get_session(session_token)
         if not session_data:
             return None
 
@@ -117,10 +114,10 @@ class AuthenticationService:
             }
         return None
 
-    def change_password(self, session_token: str, current_password: str, new_password: str) -> dict:
+    async def change_password(self, session_token: str, current_password: str, new_password: str) -> dict:
         """Change user password"""
         try:
-            user_data = self.get_current_user(session_token)
+            user_data = await self.get_current_user(session_token)
             if not user_data:
                 return {"success": False, "error": "User not authenticated"}
 

@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from uuid import uuid4
+import asyncio
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -13,6 +14,7 @@ from src.langgraph_core.tools.custom_tools import (
 from src.langgraph_core.tools.tools import get_tools
 from src.loggers import Logger
 from src.utils.Utilities import TravelInfo
+from src.cache.redis_client import redis_client
 
 logger = Logger(__name__).get_logger()
 
@@ -23,7 +25,7 @@ class TravelPlannerNode:
         self.weather_tool_name = weather_tool.name
         self.search_tool_name = get_tools()[0].name
 
-    def router(self, state: TravelPlannerState) -> dict:
+    async def router(self, state: TravelPlannerState) -> dict:
         logger.info("Router node is called")
         if not state.get("messages"):
             return {"route": "chat", "messages": [AIMessage(content="Hello! I'm your travel assistant. How can I help you today?")], "last_user_message": ""}
@@ -83,7 +85,7 @@ class TravelPlannerNode:
         # Tool call injection
         if route == "weather":
             city_prompt = f"Extract city from: '{user_input}' or say 'pune'"
-            city_response = self.llm.invoke([HumanMessage(content=city_prompt)])
+            city_response = await self.llm.ainvoke([HumanMessage(content=city_prompt)])
             city = city_response.content.strip() or "pune"
             ai_msg = AIMessage(
                 content="Let me check the weather for you...",
@@ -92,7 +94,7 @@ class TravelPlannerNode:
             messages = messages + [ai_msg]
         elif route == "search":
             query_prompt = f"Extract search query from: '{user_input}'"
-            query_response = self.llm.invoke([HumanMessage(content=query_prompt)])
+            query_response = await self.llm.ainvoke([HumanMessage(content=query_prompt)])
             query = query_response.content.strip() or user_input
             ai_msg = AIMessage(
                 content=f"Searching for {query}...",
@@ -103,7 +105,7 @@ class TravelPlannerNode:
         logger.info(f"Router classified intent as: {route}")
         return {"route": route, "messages": messages, "last_user_message": user_input}
 
-    def chat_node(self, state: TravelPlannerState):
+    async def chat_node(self, state: TravelPlannerState):
         logger.info("Chat_node is called")
         if not state["messages"]:
             return {"messages": [AIMessage(content="Hello! How can I help you?")]}
@@ -112,10 +114,10 @@ class TravelPlannerNode:
         if not isinstance(last_msg, HumanMessage):
             return {"messages": state["messages"]}
 
-        response = self.llm.invoke([last_msg])
+        response = await self.llm.ainvoke([last_msg])
         return {"messages": state["messages"] + [response]}
 
-    def travel_node(self, state: TravelPlannerState):
+    async def travel_node(self, state: TravelPlannerState):
         logger.info("Travel node is called")
         extractor = TravelInfo()
         logger.info("Extracting the info from user msg ...")
@@ -160,9 +162,9 @@ class TravelPlannerNode:
             state["route"] = "flight_search_node"
 
         logger.info(f"Travel node: route set to collect_missing_travel_info_node, missing_fields: {missing_fields}")
-        return {"messages": state["messages"], "destination": state.get("destination"), "source": state.get("source"), "start_date": state.get("start_date"), "end_date": state.get("end_date"), "duration": state.get("duration"), "route": state["route"], "awaiting_field": state.get("awaiting_field"), "missing_fields": state.get("missing_fields")}  # ← THIS IS CRITICAL  # ← THIS TOO
+        return {"messages": state["messages"], "destination": state.get("destination"), "source": state.get("source"), "start_date": state.get("start_date"), "end_date": state.get("end_date"), "duration": state.get("duration"), "route": state["route"], "awaiting_field": state.get("awaiting_field"), "missing_fields": state.get("missing_fields")}
 
-    def collect_missing_travel_info(self, state: TravelPlannerState):
+    async def collect_missing_travel_info(self, state: TravelPlannerState):
         logger.info("Collect missing travel info node is called")
 
         current_field = state.get("awaiting_field")
@@ -277,7 +279,7 @@ class TravelPlannerNode:
             logger.error(f"Error calculating duration:{e}")
             return 0
 
-    def process_travel_confirmation(self, state: TravelPlannerState):
+    async def process_travel_confirmation(self, state: TravelPlannerState):
         logger.info("Process travel confirmation node is called")
 
         last_msg = state["messages"][-1] if state["messages"] else None
@@ -312,14 +314,13 @@ class TravelPlannerNode:
 
         return state
 
-    def flight_search_node(self, state: TravelPlannerState):
+    async def flight_search_node(self, state: TravelPlannerState):
         logger.info("Flight search node is called")
 
         source = state.get("source")
         destination = state.get("destination")
         start_date = state.get("start_date")
         end_date = state.get("end_date")
-
         # Validate we have all required information
         if not all([source, destination, start_date, end_date]):
             missing_fields = []
@@ -370,7 +371,7 @@ class TravelPlannerNode:
             """
 
             try:
-                dest_resp = self.llm.invoke([HumanMessage(content=destination_check_prompt)])
+                dest_resp = await self.llm.ainvoke([HumanMessage(content=destination_check_prompt)])
                 dest_type = dest_resp.content.strip().lower()
 
                 if "country" in dest_type:
@@ -379,7 +380,7 @@ class TravelPlannerNode:
                     What is the main city or capital of {destination} for flight searches?
                     Respond with ONLY the city name.
                     """
-                    city_resp = self.llm.invoke([HumanMessage(content=city_suggestion_prompt)])
+                    city_resp = await self.llm.ainvoke([HumanMessage(content=city_suggestion_prompt)])
                     suggested_city = city_resp.content.strip()
 
                     state["messages"].append(AIMessage(content=f"I see you mentioned {destination} which is a country. For flight search, I need a specific city. Should I use {suggested_city} or would you like to specify a different city in {destination}?"))
@@ -411,7 +412,7 @@ class TravelPlannerNode:
         """
 
         try:
-            resp = self.llm.invoke([HumanMessage(content=IATA_prompt)])
+            resp = await self.llm.ainvoke([HumanMessage(content=IATA_prompt)])
             raw_text = resp.content.strip()
             iata_data = json.loads(raw_text)
 
@@ -435,15 +436,28 @@ class TravelPlannerNode:
         # Step 5: Search for flights
         try:
             logger.info(f"Searching flights from {source_iata} to {destination_iata}")
+            flight_key = f"{source.lower()}-{destination.lower()}-{start_date}-{end_date}"
+            # print("::::", flight_key)
+            flight_expire = 10800
+            cached_flight = await redis_client.get(flight_key)
+            # print("???", cached_flight)
+            if cached_flight:
+                logger.info(f"cache found for {flight_key}")
+                flights_dict = json.loads(cached_flight)
+            else:
+                logger.info(f" no cache found for {flight_key}")
+                flights_data = await search_flights(
+                    source_iata, destination_iata, start_date, end_date, state.get("flight_type", "cheapest"))
 
-            flights_data = search_flights(source=source_iata, destination=destination_iata, start_date=start_date, end_date=end_date, flight_type=state.get("flight_type", "cheapest"))
+                flights_list = flights_data.get("flights", [])
 
-            flights_list = flights_data.get("flights", [])
+                # Store flights in dictionary format with sequence numbers as keys
+                flights_dict = {}
+                for i, flight in enumerate(flights_list, 1):
+                    flights_dict[str(i)] = flight
 
-            # Store flights in dictionary format with sequence numbers as keys
-            flights_dict = {}
-            for i, flight in enumerate(flights_list, 1):
-                flights_dict[str(i)] = flight
+                cached_flight = await redis_client.set_json(flight_key, flights_dict, flight_expire)
+                logger.info(f"flight details cached: {flight_key}")
 
             state["available_flights"] = flights_dict  # Store as dict with sequence numbers
             state["flights_processed"] = False  # Flag to track if flights have been processed
@@ -497,7 +511,7 @@ class TravelPlannerNode:
 
         return state
 
-    def flight_selection_node(self, state: TravelPlannerState):
+    async def flight_selection_node(self, state: TravelPlannerState):
         logger.info("Flight selection node is called")
 
         last_msg = state["messages"][-1] if state["messages"] else None
@@ -525,7 +539,7 @@ class TravelPlannerNode:
                 confirmation_msg += "Now proceeding to hotel search..."
 
                 state["messages"].append(AIMessage(content=confirmation_msg))
-                state["route"] = "hotel_search_node"  # ← CHANGE THIS to hotel_search_node
+                state["route"] = "hotel_search_node"
                 logger.info(f"User selected flight {user_input}: {airline}")
 
             else:
@@ -541,7 +555,7 @@ class TravelPlannerNode:
 
         return state
 
-    def hotel_search_node(self, state: TravelPlannerState):
+    async def hotel_search_node(self, state: TravelPlannerState):
         logger.info("Hotel search node is called")
 
         destination = state.get("destination")
@@ -560,15 +574,24 @@ class TravelPlannerNode:
             return state
 
         try:
-            hotel_results = search_hotels(city=destination, check_in=start_date, check_out=end_date, guests=state["accommodation_guests"])
-
-            hotel_options = hotel_results.get("hotels", [])
-            print(len(hotel_options))
-
-            # Store hotels in dictionary format with sequence numbers as keys
-            hotels_dict = {}
-            for i, hotel in enumerate(hotel_options, 1):
-                hotels_dict[str(i)] = hotel
+            hotel_key = f"{destination.lower()}-{start_date}-{end_date}"
+            hotel_expire = 10800
+            cached_hotel = await redis_client.get(hotel_key)
+            if cached_hotel:
+                logger.info(f"cache found for {hotel_key}")
+                hotels_dict = json.loads(cached_hotel)
+            else:
+                logger.info(f" no cache found for {hotel_key}")
+                hotel_results = await search_hotels(
+                    city=destination, check_in=start_date, check_out=end_date, guests=state["accommodation_guests"])
+                hotel_options = hotel_results.get("hotels", [])
+                # print(len(hotel_options))
+                # Store hotels in dictionary format with sequence numbers as keys
+                hotels_dict = {}
+                for i, hotel in enumerate(hotel_options, 1):
+                    hotels_dict[str(i)] = hotel
+                await redis_client.set_json(hotel_key, hotels_dict, hotel_expire)
+                logger.info(f"hotel details cached: {hotel_key}")
 
             state["available_hotels"] = hotels_dict  # Store as dict with sequence numbers
             state["hotels_processed"] = False  # Flag to track if hotels have been processed
@@ -611,7 +634,7 @@ class TravelPlannerNode:
                 no_hotels_msg += "You can try adjusting your search preferences."
 
                 state["messages"].append(AIMessage(content=no_hotels_msg))
-                state["route"] = "END"  # originally END it is for testing
+                state["route"] = "END"
                 logger.info("No hotels found, ending search")
 
         except Exception as e:
@@ -624,7 +647,7 @@ class TravelPlannerNode:
 
         return state
 
-    def hotel_selection_node(self, state: TravelPlannerState):
+    async def hotel_selection_node(self, state: TravelPlannerState):
         logger.info("Hotel selection node is called")
 
         last_msg = state["messages"][-1] if state["messages"] else None
@@ -661,14 +684,14 @@ class TravelPlannerNode:
                 confirmation_msg += " **Your travel planning is complete! Have a wonderful trip!**"
 
                 state["messages"].append(AIMessage(content=confirmation_msg))
-                state["route"] = "generate_itinerary_node"  # Route to itinerary generation
+                state["route"] = "generate_itinerary_node"
                 logger.info(f"User selected hotel {user_input}, routing to itinerary generation")
 
             else:
                 # Invalid selection
                 error_msg = f" Invalid selection: '{user_input}'. Please enter a valid hotel number (1, 2, 3, etc.) from the list above."
                 state["messages"].append(AIMessage(content=error_msg))
-                state["route"] = "hotel_selection_node"  # Stay in selection node
+                state["route"] = "hotel_selection_node"
                 logger.info(f"User entered invalid hotel selection: {user_input}")
 
         else:
@@ -677,7 +700,7 @@ class TravelPlannerNode:
 
         return state
 
-    def collect_hotel_info_node(self, state: TravelPlannerState):
+    async def collect_hotel_info_node(self, state: TravelPlannerState):
         """Collect missing hotel information"""
         logger.info("Collect hotel info node is called")
 
@@ -718,7 +741,7 @@ class TravelPlannerNode:
 
         return state
 
-    def generate_itinerary_node(self, state: TravelPlannerState):
+    async def generate_itinerary_node(self, state: TravelPlannerState):
         """Generate travel itinerary based on selected hotel and flight"""
         logger.info("Generate itinerary node is called")
 
@@ -768,7 +791,7 @@ class TravelPlannerNode:
             Format it clearly with daily sections.
             """
 
-            itinerary_response = self.llm.invoke([HumanMessage(content=itinerary_prompt)])
+            itinerary_response = await self.llm.ainvoke([HumanMessage(content=itinerary_prompt)])
             itinerary_content = itinerary_response.content
 
             # Format the final message with trip summary + itinerary
